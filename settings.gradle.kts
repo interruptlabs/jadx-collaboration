@@ -1,2 +1,1 @@
-
-rootProject.name = "jadx-example-plugin"
+rootProject.name = "jadx-collaboration"

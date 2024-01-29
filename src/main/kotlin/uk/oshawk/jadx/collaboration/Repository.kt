@@ -21,7 +21,7 @@ class NodeRef(nodeRef: IJavaNodeRef) : IJavaNodeRef {
     override fun compareTo(other: IJavaNodeRef?) = COMPARATOR.compare(this, other)
 }
 
-class ProjectRename(val nodeRef: NodeRef, val newName: String): ICodeRename {
+class ProjectRename(private val nodeRef: NodeRef, private val newName: String): ICodeRename {
     companion object {
         val COMPARATOR: Comparator<ICodeRename> = Comparator
                 .comparing { obj: ICodeRename -> obj.codeRef }

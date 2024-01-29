@@ -15,7 +15,7 @@ class Plugin : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
         val LOG = KotlinLogging.logger(ID)
-        val GSON = GsonBuilder().setPrettyPrinting().create()
+        val GSON = GsonBuilder().serializeNulls().setPrettyPrinting().create()
     }
 
     private val options = Options()
@@ -28,7 +28,7 @@ class Plugin : JadxPlugin {
 
         this.context?.registerOptions(options)
 
-        this.context?.guiContext?.addMenuAction("Push") { this.context?.guiContext?.uiRun(this::pull) }
+        this.context?.guiContext?.addMenuAction("Pull") { this.context?.guiContext?.uiRun(this::pull) }
         this.context?.guiContext?.addMenuAction("Push") { this.context?.guiContext?.uiRun(this::push) }
 
         this.context?.guiContext?.registerGlobalKeyBinding("$ID.pull", "ctrl BACK_SLASH") { this.context?.guiContext?.uiRun(this::pull) }
@@ -43,7 +43,9 @@ class Plugin : JadxPlugin {
 
         val repositoryFile = File("${options.repository}$suffix")
         return try {
-            GSON.fromJson(repositoryFile.reader(), default!!::class.java)
+            repositoryFile.reader().use {
+                GSON.fromJson(it, default!!::class.java) ?: default
+            }
         } catch (_: FileNotFoundException) {
             default
         } catch (_: Exception) {
@@ -63,7 +65,9 @@ class Plugin : JadxPlugin {
 
         val repositoryFile = File("${options.repository}$suffix")
         return try {
-            GSON.toJson(repository, repositoryFile.writer())
+            repositoryFile.writer().use {
+                GSON.toJson(repository, it)
+            }
         } catch (_: FileNotFoundException) {
             LOG.error { "Repository file (${options.repository}$suffix) invalid path." }
             null
@@ -79,10 +83,12 @@ class Plugin : JadxPlugin {
     fun projectToLocalRepository(localRepository: LocalRepository) {
         val projectRenames = this.context!!.args.codeData.renames.sorted()
         var projectRenamesIndex = 0
+        LOG.info { "projectToLocalRepository: ${projectRenames.size} project renames" }
 
         val oldLocalRepositoryRenames = localRepository.renames
         var oldLocalRepositoryRenamesIndex = 0
         localRepository.renames = mutableListOf()
+        LOG.info { "projectToLocalRepository: ${oldLocalRepositoryRenames.size} old local repository renames" }
 
         while (projectRenamesIndex != projectRenames.size || oldLocalRepositoryRenamesIndex != oldLocalRepositoryRenames.size) {
             val projectRename = projectRenames.getOrNull(projectRenamesIndex)
@@ -113,18 +119,22 @@ class Plugin : JadxPlugin {
                 }
             })
         }
+
+        LOG.info { "projectToLocalRepository: ${localRepository.renames.size} new local repository renames" }
     }
 
     fun remoteRepositoryToLocalRepository(remoteRepository: RemoteRepository, localRepository: LocalRepository): Boolean {
         var remoteRepositoryRenamesIndex = 0
+        LOG.info { "remoteRepositoryToLocalRepository: ${remoteRepository.renames.size} remote repository renames" }
 
         val oldLocalRepositoryRenames = localRepository.renames
         var oldLocalRepositoryRenamesIndex = 0
         localRepository.renames = mutableListOf()
+        LOG.info { "remoteRepositoryToLocalRepository: ${oldLocalRepositoryRenames.size} old local repository renames" }
 
         var conflict = false
 
-        while (remoteRepositoryRenamesIndex != remoteRepository.renames.size && oldLocalRepositoryRenamesIndex != oldLocalRepositoryRenames.size) {
+        while (remoteRepositoryRenamesIndex != remoteRepository.renames.size || oldLocalRepositoryRenamesIndex != oldLocalRepositoryRenames.size) {
             val remoteRepositoryRename = remoteRepository.renames.getOrNull(remoteRepositoryRenamesIndex)
             val oldLocalRepositoryRename = oldLocalRepositoryRenames.getOrNull(oldLocalRepositoryRenamesIndex)
 
@@ -153,11 +163,13 @@ class Plugin : JadxPlugin {
                     } else {
                         // Conflict. Currently, use our version. TODO: Actual conflict resolution (would need GUI).
                         conflict = true
-                        LocalRename(oldLocalRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)
+                        LocalRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, remoteRepositoryRename.newName)
                     }
                 }
             })
         }
+
+        LOG.info { "remoteRepositoryToLocalRepository: ${localRepository.renames.size} new local repository renames" }
 
         return conflict
     }
@@ -167,7 +179,7 @@ class Plugin : JadxPlugin {
                 .filter { it.newName != null }
                 .map { ProjectRename(it.nodeRef, it.newName!!) }
 
-        context!!.events().send(ReloadProject.INSTANCE)
+        context!!.events().send(ReloadProject::class.java.declaredFields.first().get(null) as ReloadProject)  // TODO: Change this when the singleton member name is stable.
     }
 
     fun pull(): Boolean? {

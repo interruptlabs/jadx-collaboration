@@ -1,12 +1,12 @@
 package uk.oshawk.jadx.collaboration
 
+import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jadx.api.data.impl.JadxCodeData
 import jadx.api.plugins.JadxPlugin
 import jadx.api.plugins.JadxPluginContext
 import jadx.api.plugins.JadxPluginInfo
-import jadx.api.plugins.events.JadxEvents
 import jadx.api.plugins.events.types.ReloadProject
 import java.io.File
 import java.io.FileNotFoundException
@@ -15,7 +15,7 @@ class Plugin : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
         val LOG = KotlinLogging.logger(ID)
-        val GSON = GsonBuilder().serializeNulls().setPrettyPrinting().create()
+        val GSON: Gson = GsonBuilder().serializeNulls().setPrettyPrinting().create()
     }
 
     private val options = Options()
@@ -80,7 +80,7 @@ class Plugin : JadxPlugin {
     private fun writeLocalRepository(repository: LocalRepository) = writeRepository(".local", repository)
     private fun writeRemoteRepository(repository: RemoteRepository) = writeRepository(".", repository)
 
-    fun projectToLocalRepository(localRepository: LocalRepository) {
+    private fun projectToLocalRepository(localRepository: LocalRepository) {
         val projectRenames = this.context!!.args.codeData.renames.sorted()
         var projectRenamesIndex = 0
         LOG.info { "projectToLocalRepository: ${projectRenames.size} project renames" }
@@ -123,7 +123,7 @@ class Plugin : JadxPlugin {
         LOG.info { "projectToLocalRepository: ${localRepository.renames.size} new local repository renames" }
     }
 
-    fun remoteRepositoryToLocalRepository(remoteRepository: RemoteRepository, localRepository: LocalRepository): Boolean {
+    private fun remoteRepositoryToLocalRepository(remoteRepository: RemoteRepository, localRepository: LocalRepository): Boolean {
         var remoteRepositoryRenamesIndex = 0
         LOG.info { "remoteRepositoryToLocalRepository: ${remoteRepository.renames.size} remote repository renames" }
 
@@ -182,29 +182,62 @@ class Plugin : JadxPlugin {
         context!!.events().send(ReloadProject::class.java.declaredFields.first().get(null) as ReloadProject)  // TODO: Change this when the singleton member name is stable.
     }
 
-    fun pull(): Boolean? {
+    private fun localRepositoryToRemoteRepository(localRepository: LocalRepository, remoteRepository: RemoteRepository) {
+        // Overwrite the remote repository with the remote repository (remote should have been merged into local beforehand).
+        // Update the local repository last pull new names.
+
+        remoteRepository.renames = localRepository.renames.map {RemoteRename(it.nodeRef, it.newName) }.toMutableList()
+        localRepository.renames = localRepository.renames.map { LocalRename(it.nodeRef, it.newName, it.newName) }.toMutableList()
+    }
+
+    private fun pull() {
         // Update local repository with project changes.
         // Pull remote repository into local repository.
         // Update project from local repository.
 
-        val localRepository = readLocalRepository() ?: return null
+        val localRepository = readLocalRepository() ?: return
 
         projectToLocalRepository(localRepository)
 
         // TODO: Run pre-pull script.
 
-        val remoteRepository = readRemoteRepository() ?: return null
+        val remoteRepository = readRemoteRepository() ?: return
 
-        val conflict = remoteRepositoryToLocalRepository(remoteRepository, localRepository)
+        remoteRepositoryToLocalRepository(remoteRepository, localRepository)
 
-        writeLocalRepository(localRepository) ?: return null
+        writeLocalRepository(localRepository) ?: return
 
         localRepositoryToProject(localRepository)
-
-        return conflict
     }
 
-    fun push() {
+    private fun push() {
+        // Update local repository with project changes.
+        // Pull remote repository into local repository until there is no conflict.
 
+        val localRepository = readLocalRepository() ?: return
+
+        projectToLocalRepository(localRepository)
+
+        // Repeat if there is a conflict. Should limit the chance of race conditions, since the user may take time to resolve conflicts.
+        var remoteRepository: RemoteRepository
+        do {
+            // TODO: Run pre-pull script.
+
+            remoteRepository = readRemoteRepository() ?: return
+
+            val conflict = remoteRepositoryToLocalRepository(remoteRepository, localRepository)
+        } while (conflict)
+
+        localRepositoryToRemoteRepository(localRepository, remoteRepository)
+
+        writeRemoteRepository(remoteRepository) ?: return
+
+        // TODO: Run post-pull script.
+        // TODO: Use exit codes to potentially reset the process.
+
+        // Think it is a good idea to do this after the script. If something goes wrong, the on-disk local repository should allow us to recover.
+        writeLocalRepository(localRepository)
+
+        localRepositoryToProject(localRepository)
     }
 }

@@ -19,8 +19,8 @@ class Options : BasePluginOptionsBuilder() {
             .defaultValue("")
             .setter { v -> prePull = v }
             .flags(OptionFlag.PER_PROJECT, OptionFlag.NOT_CHANGING_CODE)
-        strOption("${Plugin.ID}.pre-push")
-            .description("Path to the pre-push script.")
+        strOption("${Plugin.ID}.post-push")
+            .description("Path to the post-push script.")
             .defaultValue("")
             .setter { v -> prePush = v }
             .flags(OptionFlag.PER_PROJECT, OptionFlag.NOT_CHANGING_CODE)

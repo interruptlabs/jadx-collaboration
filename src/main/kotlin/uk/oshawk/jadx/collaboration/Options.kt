@@ -5,8 +5,8 @@ import jadx.api.plugins.options.impl.BasePluginOptionsBuilder
 
 class Options : BasePluginOptionsBuilder() {
     var repository = ""
-    var prePush = ""
     var prePull = ""
+    var postPush = ""
 
     override fun registerOptions() {
         strOption("${Plugin.ID}.repository")
@@ -22,7 +22,7 @@ class Options : BasePluginOptionsBuilder() {
         strOption("${Plugin.ID}.post-push")
             .description("Path to the post-push script.")
             .defaultValue("")
-            .setter { v -> prePush = v }
+            .setter { v -> postPush = v }
             .flags(OptionFlag.PER_PROJECT, OptionFlag.NOT_CHANGING_CODE)
     }
 

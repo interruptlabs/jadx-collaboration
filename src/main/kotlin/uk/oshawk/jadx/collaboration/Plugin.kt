@@ -10,6 +10,8 @@ import jadx.api.plugins.JadxPluginInfo
 import jadx.api.plugins.events.types.ReloadProject
 import java.io.File
 import java.io.FileNotFoundException
+import java.util.*
+import kotlin.math.log
 
 class Plugin : JadxPlugin {
     companion object {
@@ -190,6 +192,48 @@ class Plugin : JadxPlugin {
         localRepository.renames = localRepository.renames.map { LocalRename(it.nodeRef, it.newName, it.newName) }.toMutableList()
     }
 
+    private fun runScript(script: String): Int {
+        if (script.isEmpty()) return 0
+
+        val command = mutableListOf<String>()
+
+        if (System.getProperty("os.name").lowercase(Locale.getDefault()).contains("win")) {
+            command.add(0, "powershell.exe")
+        }
+
+        command.add(script)
+        command.add(options.repository)
+
+        val process = ProcessBuilder(command).start()
+        process.waitFor()
+        return process.exitValue()
+    }
+
+    private fun runPrePullScript() = runScript(this.options.prePull)
+    private fun runPostPushScript() = runScript(this.options.postPush)
+
+    private fun runPrePullScriptRepeat(): Unit? {
+        for (i in 1..5) {
+            when (val exitCode = runPrePullScript()) {
+                0 -> break
+                1 -> {
+                    if (i == 5) {
+                        LOG.error { "Pre-pull script failed temporarily on try $i. Aborting." }
+                        return null
+                    } else {
+                        LOG.warn { "Pre-pull script failed temporarily on try $i. Retrying." }
+                    }
+                }
+                else -> {
+                    LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting," }
+                    return null
+                }
+            }
+        }
+
+        return Unit
+    }
+
     private fun pull() {
         // Update local repository with project changes.
         // Pull remote repository into local repository.
@@ -199,7 +243,7 @@ class Plugin : JadxPlugin {
 
         projectToLocalRepository(localRepository)
 
-        // TODO: Run pre-pull script.
+        runPrePullScriptRepeat() ?: return
 
         val remoteRepository = readRemoteRepository() ?: return
 
@@ -214,30 +258,46 @@ class Plugin : JadxPlugin {
         // Update local repository with project changes.
         // Pull remote repository into local repository until there is no conflict.
 
-        val localRepository = readLocalRepository() ?: return
+        var localRepository: LocalRepository? = null
+        for (i in 1..5) {
+            localRepository = readLocalRepository() ?: return
 
-        projectToLocalRepository(localRepository)
+            projectToLocalRepository(localRepository)
 
-        // Repeat if there is a conflict. Should limit the chance of race conditions, since the user may take time to resolve conflicts.
-        var remoteRepository: RemoteRepository
-        do {
-            // TODO: Run pre-pull script.
+            // Repeat if there is a conflict. Should limit the chance of race conditions, since the user may take time to resolve conflicts.
+            var remoteRepository: RemoteRepository
+            do {
+                runPrePullScriptRepeat() ?: return
 
-            remoteRepository = readRemoteRepository() ?: return
+                remoteRepository = readRemoteRepository() ?: return
 
-            val conflict = remoteRepositoryToLocalRepository(remoteRepository, localRepository)
-        } while (conflict)
+                val conflict = remoteRepositoryToLocalRepository(remoteRepository, localRepository)
+            } while (conflict)
 
-        localRepositoryToRemoteRepository(localRepository, remoteRepository)
+            localRepositoryToRemoteRepository(localRepository, remoteRepository)
 
-        writeRemoteRepository(remoteRepository) ?: return
+            writeRemoteRepository(remoteRepository) ?: return
 
-        // TODO: Run post-pull script.
-        // TODO: Use exit codes to potentially reset the process.
+            when (val exitCode = runPostPushScript()) {
+                0 -> break
+                1 -> {
+                    if (i == 5) {
+                        LOG.error { "Post-push script failed temporarily on try $i. Aborting." }
+                        return
+                    } else {
+                        LOG.warn { "Post-push script failed temporarily on try $i. Retrying." }
+                    }
+                }
+                else -> {
+                    LOG.error { "Post-push script failed permanently with exit code $exitCode on try number $i. Aborting," }
+                    return
+                }
+            }
+        }
 
         // Think it is a good idea to do this after the script. If something goes wrong, the on-disk local repository should allow us to recover.
-        writeLocalRepository(localRepository)
+        writeLocalRepository(localRepository!!)
 
-        localRepositoryToProject(localRepository)
+        localRepositoryToProject(localRepository!!)
     }
 }

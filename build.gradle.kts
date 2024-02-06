@@ -21,6 +21,8 @@ dependencies {
 	implementation("io.github.oshai:kotlin-logging-jvm:5.1.0")
 	implementation("com.google.code.gson:gson:2.10.1")
 
+	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
+
 	testImplementation("ch.qos.logback:logback-classic:1.4.14")
 	testImplementation("org.assertj:assertj-core:3.25.1")
 	testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")

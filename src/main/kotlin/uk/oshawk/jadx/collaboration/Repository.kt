@@ -3,7 +3,11 @@ package uk.oshawk.jadx.collaboration
 import jadx.api.data.ICodeRename
 import jadx.api.data.IJavaNodeRef
 
-class NodeRef(nodeRef: IJavaNodeRef) : IJavaNodeRef {
+class NodeRef(
+        private val type: IJavaNodeRef.RefType,
+        private val declaringClass: String,
+        private val shortId: String,
+) : IJavaNodeRef {
     companion object {
         val COMPARATOR: Comparator<IJavaNodeRef> = Comparator
                 .comparing { obj: IJavaNodeRef -> obj.type }
@@ -11,9 +15,7 @@ class NodeRef(nodeRef: IJavaNodeRef) : IJavaNodeRef {
                 .thenComparing { obj: IJavaNodeRef -> obj.shortId }
     }
 
-    private val type: IJavaNodeRef.RefType = nodeRef.type
-    private val declaringClass: String = nodeRef.declaringClass
-    private val shortId: String = nodeRef.shortId
+    constructor(nodeRef: IJavaNodeRef) : this(nodeRef.type, nodeRef.declaringClass, nodeRef.shortId)
 
     override fun getType() = type
     override fun getDeclaringClass() = declaringClass
@@ -21,10 +23,10 @@ class NodeRef(nodeRef: IJavaNodeRef) : IJavaNodeRef {
     override fun compareTo(other: IJavaNodeRef?) = COMPARATOR.compare(this, other)
 }
 
-class ProjectRename(private val nodeRef: NodeRef, private val newName: String): ICodeRename {
+class ProjectRename(private val nodeRef: NodeRef, private val newName: String) : ICodeRename {
     companion object {
         val COMPARATOR: Comparator<ICodeRename> = Comparator
-                .comparing { obj: ICodeRename -> obj.codeRef }
+                .comparing { obj: ICodeRename -> obj.nodeRef }
                 .thenComparing { obj: ICodeRename -> obj.newName }
     }
 
@@ -35,11 +37,8 @@ class ProjectRename(private val nodeRef: NodeRef, private val newName: String): 
 
 }
 
-data class LocalRename(
-        val nodeRef: NodeRef,
-        val newName: String?,
-        val lastPullNewName: String?
-)
+data class LocalRename(val nodeRef: NodeRef, val newName: String?, val lastPullNewName: String?)
+
 class LocalRepository {
     var renames = mutableListOf<LocalRename>()
 }

@@ -11,7 +11,6 @@ import jadx.api.plugins.events.types.ReloadProject
 import java.io.File
 import java.io.FileNotFoundException
 import java.util.*
-import kotlin.math.log
 
 class Plugin : JadxPlugin {
     companion object {
@@ -100,13 +99,15 @@ class Plugin : JadxPlugin {
                 projectRename == null || (oldLocalRepositoryRename != null && projectRename.nodeRef > oldLocalRepositoryRename.nodeRef) -> {
                     // Local repository rename not present in project. Must have been deleted.
                     oldLocalRepositoryRenamesIndex++
-                    LocalRename(oldLocalRepositoryRename!!.nodeRef, null, oldLocalRepositoryRename!!.lastPullNewName)
+                    LocalRename(oldLocalRepositoryRename!!.nodeRef, null, oldLocalRepositoryRename.lastPullNewName)
                 }
+
                 oldLocalRepositoryRename == null || (projectRename != null && projectRename.nodeRef < oldLocalRepositoryRename.nodeRef) -> {
                     // Project rename not present in local repository. Add it.
                     projectRenamesIndex++
-                    LocalRename(NodeRef(projectRename!!.nodeRef), projectRename!!.newName, null)
+                    LocalRename(NodeRef(projectRename.nodeRef), projectRename.newName, null)
                 }
+
                 else -> {
                     projectRenamesIndex++
                     oldLocalRepositoryRenamesIndex++
@@ -145,13 +146,15 @@ class Plugin : JadxPlugin {
                     // Local repository rename not present in remote repository. Keep it as is.
                     oldLocalRepositoryRenamesIndex++
                     assert(oldLocalRepositoryRename!!.lastPullNewName == null) // If a rename was deleted on remote, an entry should still be present, but with a null new name.
-                    oldLocalRepositoryRename!!
+                    oldLocalRepositoryRename
                 }
+
                 oldLocalRepositoryRename == null || (remoteRepositoryRename != null && remoteRepositoryRename.nodeRef < oldLocalRepositoryRename.nodeRef) -> {
                     // Remote repository rename not present in local repository. Add it (again, deletions would be explicit),
                     remoteRepositoryRenamesIndex++
-                    LocalRename(remoteRepositoryRename!!.nodeRef, remoteRepositoryRename!!.newName, remoteRepositoryRename!!.newName)
+                    LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)
                 }
+
                 else -> {
                     remoteRepositoryRenamesIndex++
                     oldLocalRepositoryRenamesIndex++
@@ -188,7 +191,7 @@ class Plugin : JadxPlugin {
         // Overwrite the remote repository with the remote repository (remote should have been merged into local beforehand).
         // Update the local repository last pull new names.
 
-        remoteRepository.renames = localRepository.renames.map {RemoteRename(it.nodeRef, it.newName) }.toMutableList()
+        remoteRepository.renames = localRepository.renames.map { RemoteRename(it.nodeRef, it.newName) }.toMutableList()
         localRepository.renames = localRepository.renames.map { LocalRename(it.nodeRef, it.newName, it.newName) }.toMutableList()
     }
 
@@ -224,6 +227,7 @@ class Plugin : JadxPlugin {
                         LOG.warn { "Pre-pull script failed temporarily on try $i. Retrying." }
                     }
                 }
+
                 else -> {
                     LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting," }
                     return null
@@ -288,6 +292,7 @@ class Plugin : JadxPlugin {
                         LOG.warn { "Post-push script failed temporarily on try $i. Retrying." }
                     }
                 }
+
                 else -> {
                     LOG.error { "Post-push script failed permanently with exit code $exitCode on try number $i. Aborting," }
                     return
@@ -298,6 +303,6 @@ class Plugin : JadxPlugin {
         // Think it is a good idea to do this after the script. If something goes wrong, the on-disk local repository should allow us to recover.
         writeLocalRepository(localRepository!!)
 
-        localRepositoryToProject(localRepository!!)
+        localRepositoryToProject(localRepository)
     }
 }

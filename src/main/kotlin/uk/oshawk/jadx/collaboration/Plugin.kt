@@ -180,9 +180,14 @@ class Plugin : JadxPlugin {
     }
 
     private fun localRepositoryToProject(localRepository: LocalRepository) {
+        LOG.info { "localRepositoryToProject: ${localRepository.renames.size} local repository renames" }
+        LOG.info { "localRepositoryToProject: ${this.context!!.args.codeData.renames.size} old project renames" }
+
         (this.context!!.args.codeData as JadxCodeData).renames = localRepository.renames
                 .filter { it.newName != null }
                 .map { ProjectRename(it.nodeRef, it.newName!!) }
+
+        LOG.info { "localRepositoryToProject: ${this.context!!.args.codeData.renames.size} new project renames" }
 
         context!!.events().send(ReloadProject::class.java.declaredFields.first().get(null) as ReloadProject)  // TODO: Change this when the singleton member name is stable.
     }
@@ -191,8 +196,13 @@ class Plugin : JadxPlugin {
         // Overwrite the remote repository with the remote repository (remote should have been merged into local beforehand).
         // Update the local repository last pull new names.
 
+        LOG.info { "localRepositoryToProject: ${localRepository.renames.size} local repository renames" }
+        LOG.info { "localRepositoryToProject: ${remoteRepository.renames.size} old remote repository renames" }
+
         remoteRepository.renames = localRepository.renames.map { RemoteRename(it.nodeRef, it.newName) }.toMutableList()
         localRepository.renames = localRepository.renames.map { LocalRename(it.nodeRef, it.newName, it.newName) }.toMutableList()
+
+        LOG.info { "localRepositoryToProject: ${remoteRepository.renames.size} new remote repository renames" }
     }
 
     private fun runScript(script: String): Int {

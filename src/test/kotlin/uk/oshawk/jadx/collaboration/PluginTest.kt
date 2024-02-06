@@ -78,15 +78,6 @@ class RepositoryMockery {
         rightRemote.deleteIfExists()
         rightLocal.deleteIfExists()
         remote.deleteIfExists()
-
-        Plugin.LOG.info { "leftDirectory: $leftDirectory" }
-        Plugin.LOG.info { "leftRemote: $rightRemote" }
-
-        Plugin.LOG.info { "rightDirectory: $rightDirectory" }
-        Plugin.LOG.info { "rightRemote: $rightRemote" }
-
-        Plugin.LOG.info { "remoteDirectory: $remoteDirectory" }
-        Plugin.LOG.info { "remote: $remote" }
     }
 
     init {
@@ -95,6 +86,8 @@ class RepositoryMockery {
     }
 
     private fun copy(from: Path, to: Path) {
+        Plugin.LOG.info { "copy: $from to $to" }
+
         if (from.exists()) {
             from.copyTo(to, true)
         } else {

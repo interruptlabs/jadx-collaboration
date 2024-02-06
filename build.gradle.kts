@@ -28,6 +28,7 @@ dependencies {
 		isChanging = true
 	}
 
+	testImplementation("org.slf4j:slf4j-simple:2.0.11")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
 }
 

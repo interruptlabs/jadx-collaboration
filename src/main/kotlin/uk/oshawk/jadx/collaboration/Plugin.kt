@@ -86,7 +86,7 @@ class Plugin : JadxPlugin {
     }
 
     private fun writeLocalRepository(repository: LocalRepository) = writeRepository(".local", repository)
-    private fun writeRemoteRepository(repository: RemoteRepository) = writeRepository(".", repository)
+    private fun writeRemoteRepository(repository: RemoteRepository) = writeRepository("", repository)
 
     private fun projectToLocalRepository(localRepository: LocalRepository) {
         val projectRenames = this.context!!.args.codeData.renames.sorted()

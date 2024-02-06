@@ -72,6 +72,17 @@ class RepositoryMockery {
     val rightPlugin = PluginMockery()
 
     init {
+        Plugin.LOG.info { "leftDirectory: $leftDirectory" }
+        Plugin.LOG.info { "leftRemote: $rightRemote" }
+
+        Plugin.LOG.info { "rightDirectory: $rightDirectory" }
+        Plugin.LOG.info { "rightRemote: $rightRemote" }
+
+        Plugin.LOG.info { "remoteDirectory: $remoteDirectory" }
+        Plugin.LOG.info { "remote: $remote" }
+    }
+
+    init {
         leftPlugin.options!!.repository = leftRemote.toString()
         rightPlugin.options!!.repository = rightRemote.toString()
     }

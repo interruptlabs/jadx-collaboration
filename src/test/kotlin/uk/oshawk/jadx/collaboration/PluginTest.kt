@@ -57,21 +57,28 @@ class PluginMockery {
 }
 
 class RepositoryMockery {
-    val leftDirectory = createTempDirectory()
+    val leftDirectory = createTempDirectory("left")
     val leftRemote = Path(leftDirectory.toString(), "repository")
     val leftLocal = Path(leftDirectory.toString(), "repository.local")
 
-    val rightDirectory = createTempDirectory()
+    val rightDirectory = createTempDirectory("right")
     val rightRemote = Path(rightDirectory.toString(), "repository")
     val rightLocal = Path(rightDirectory.toString(), "repository.local")
 
-    val remoteDirectory = createTempDirectory()
+    val remoteDirectory = createTempDirectory("remote")
     val remote = Path(remoteDirectory.toString(), "repository")
 
     val leftPlugin = PluginMockery()
     val rightPlugin = PluginMockery()
 
     init {
+        // On some platforms, directories seem to be reused.
+        leftRemote.deleteIfExists()
+        leftLocal.deleteIfExists()
+        rightRemote.deleteIfExists()
+        rightLocal.deleteIfExists()
+        remote.deleteIfExists()
+
         Plugin.LOG.info { "leftDirectory: $leftDirectory" }
         Plugin.LOG.info { "leftRemote: $rightRemote" }
 

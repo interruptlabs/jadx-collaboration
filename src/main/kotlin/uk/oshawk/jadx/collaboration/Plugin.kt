@@ -48,11 +48,11 @@ class Plugin : JadxPlugin {
                 GSON.fromJson(it, default!!::class.java) ?: default
             }
 
-            LOG.info { "readRepository: read ${options.repository}" }
+            LOG.info { "readRepository: read ${options.repository}$suffix" }
 
             repository
         } catch (_: FileNotFoundException) {
-            LOG.info { "readRepository: using empty ${options.repository}" }
+            LOG.info { "readRepository: using empty ${options.repository}$suffix" }
             default
         } catch (_: Exception) {
             LOG.error { "Repository file (${options.repository}$suffix) corrupt. Requires manual fixing." }
@@ -69,15 +69,13 @@ class Plugin : JadxPlugin {
             return null
         }
 
-
-
         val repositoryFile = File("${options.repository}$suffix")
         return try {
             repositoryFile.writer().use {
                 GSON.toJson(repository, it)
             }
 
-            LOG.info { "writeRepository: written ${options.repository}" }
+            LOG.info { "writeRepository: written ${options.repository}$suffix" }
         } catch (_: FileNotFoundException) {
             LOG.error { "Repository file (${options.repository}$suffix) invalid path." }
             null

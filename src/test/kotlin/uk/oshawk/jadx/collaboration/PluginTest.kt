@@ -7,11 +7,9 @@ import jadx.api.data.impl.JadxCodeData
 import jadx.api.plugins.JadxPluginContext
 import jadx.api.plugins.events.IJadxEvents
 import jadx.api.plugins.gui.JadxGuiContext
-import net.bytebuddy.implementation.bytecode.ShiftRight
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.mockito.kotlin.*
-import java.io.File
 import java.nio.file.Path
 import kotlin.io.path.*
 

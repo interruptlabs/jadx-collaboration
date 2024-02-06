@@ -21,16 +21,14 @@ dependencies {
 	implementation("io.github.oshai:kotlin-logging-jvm:5.1.0")
 	implementation("com.google.code.gson:gson:2.10.1")
 
-	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
-
-	testImplementation("ch.qos.logback:logback-classic:1.4.14")
-	testImplementation("org.assertj:assertj-core:3.25.1")
-	testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.1")
-	testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.1")
+	testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
 	testImplementation("io.github.skylot:jadx-smali-input:1.5.0-SNAPSHOT") {
 		isChanging = true
 	}
+
+	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
 }
 
 repositories {

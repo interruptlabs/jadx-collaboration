@@ -12,7 +12,10 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.util.*
 
-class Plugin : JadxPlugin {
+class Plugin(
+    // Use remote? Pluggable for testing. Currently, always use local. TODO: Actual conflict resolution (would need GUI).
+    val conflictResolver: (remote: RemoteRename, local: LocalRename) -> Boolean = { _, _ -> false },
+) : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
         val LOG = KotlinLogging.logger(ID)
@@ -173,9 +176,13 @@ class Plugin : JadxPlugin {
                         // Local repository rename supersedes remote repository rename. Use the local repository rename.
                         oldLocalRepositoryRename
                     } else {
-                        // Conflict. Currently, use our version. TODO: Actual conflict resolution (would need GUI).
+                        // Conflict.
                         conflict = true
-                        LocalRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, remoteRepositoryRename.newName)
+                        if (conflictResolver(remoteRepositoryRename, oldLocalRepositoryRename)) {  // Use remote.
+                            LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)
+                        } else {  // Use local.
+                            LocalRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, remoteRepositoryRename.newName)
+                        }
                     }
                 }
             })

@@ -9,11 +9,12 @@ import jadx.api.plugins.events.IJadxEvents
 import jadx.api.plugins.gui.JadxGuiContext
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.fail
 import org.mockito.kotlin.*
 import java.nio.file.Path
 import kotlin.io.path.*
 
-class PluginMockery {
+class PluginMockery(conflictResolver: ((remote: RemoteRename, local: LocalRename) -> Boolean)) {
     val jadxCodeData = JadxCodeData()
     val jadxArgs = mock<JadxArgs> {
         on { codeData } doReturn jadxCodeData
@@ -45,7 +46,7 @@ class PluginMockery {
         on { registerOptions(any()) } doAnswer { options = it.getArgument<Options>(0) }
     }
 
-    val plugin = Plugin()
+    val plugin = Plugin(conflictResolver)
 
     init {
         plugin.init(jadxPluginContext)
@@ -56,7 +57,9 @@ class PluginMockery {
         set(value) { (jadxArgs.codeData as JadxCodeData).renames = value }
 }
 
-class RepositoryMockery {
+class RepositoryMockery(
+    conflictResolver: ((remote: RemoteRename, local: LocalRename) -> Boolean) = { _, _ -> fail("Conflict!") }
+) {
     val leftDirectory = createTempDirectory("left")
     val leftRemote = Path(leftDirectory.toString(), "repository")
     val leftLocal = Path(leftDirectory.toString(), "repository.local")
@@ -68,8 +71,8 @@ class RepositoryMockery {
     val remoteDirectory = createTempDirectory("remote")
     val remote = Path(remoteDirectory.toString(), "repository")
 
-    val leftPlugin = PluginMockery()
-    val rightPlugin = PluginMockery()
+    val leftPlugin = PluginMockery(conflictResolver)
+    val rightPlugin = PluginMockery(conflictResolver)
 
     init {
         // On some platforms, directories seem to be reused.
@@ -127,6 +130,8 @@ class RepositoryMockery {
 class PluginTest {
     fun genRename(i: Int) = ProjectRename(NodeRef(IJavaNodeRef.RefType.CLASS, "a$i", "b$i"), "c$i")
 
+    fun modRename(rename: ProjectRename) = ProjectRename(rename.nodeRef, "${rename.newName}m", )
+
     fun <T: Comparable<T>> assertIterableCompareTo0(left: Iterable<T>, right: Iterable<T>) {
 
         val leftIterator = left.iterator()
@@ -151,8 +156,8 @@ class PluginTest {
         val mockery = RepositoryMockery()
 
         mockery.leftPlugin.renames = listOf(genRename(0), genRename(1))
-
         mockery.leftPush()
+
         mockery.rightPull()
 
         assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(genRename(0), genRename(1)))
@@ -174,11 +179,9 @@ class PluginTest {
         val mockery = RepositoryMockery()
 
         mockery.leftPlugin.renames = listOf(genRename(0))
-
         mockery.leftPush()
 
         mockery.rightPlugin.renames = listOf(genRename(1))
-
         mockery.rightPush()
 
         assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(genRename(0)))
@@ -187,6 +190,66 @@ class PluginTest {
         mockery.leftPull()
 
         assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(genRename(0), genRename(1)))
+        assertIterableCompareTo0(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
+    }
+
+    @Test
+    fun test2() {
+        // l.set([0])
+        // l.push()
+        // l.set([0m])  // Should not conflict.
+        // l.push()
+        // r.pull()
+        // assert(l == [0m])
+        // assert(l == r)
+
+        val mockery = RepositoryMockery()
+
+        mockery.leftPlugin.renames = listOf(genRename(0))
+        mockery.leftPush()
+
+        mockery.leftPlugin.renames = listOf(modRename(genRename(0)))
+        mockery.leftPush()
+
+        mockery.rightPull()
+
+        assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(modRename(genRename(0))))
+        assertIterableCompareTo0(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
+    }
+
+    @Test
+    fun test3() {
+        // l.set([0])
+        // l.push()
+        // r.set([0m])
+        // r.push()  // Should conflict. We choose local (right).
+        // l.pull()  // Should conflict. We choose remote (left).
+        // l.push()  // No more conflicts.
+        // r.push()  // No more conflicts.
+        // assert(conflicts == 2)
+        // assert(l == [0m])
+        // assert(l == r)
+
+        var conflicts = 0
+
+        val mockery = RepositoryMockery() {
+            _, _ ->
+            conflicts++ % 2 != 0
+        }
+
+        mockery.leftPlugin.renames = listOf(genRename(0))
+        mockery.leftPush()
+
+        mockery.rightPlugin.renames = listOf(modRename(genRename(0)))
+        mockery.rightPush()
+
+        mockery.leftPull()
+        mockery.leftPush()
+
+        mockery.rightPull()
+
+        assertEquals(conflicts, 2)
+        assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(modRename(genRename(0))))
         assertIterableCompareTo0(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
     }
 }

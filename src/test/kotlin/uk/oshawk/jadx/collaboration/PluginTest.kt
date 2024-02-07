@@ -222,8 +222,13 @@ class PluginTest {
         // l.set([0])
         // l.push()
         // r.set([0m])
-        // r.push()  // Should conflict. We choose local (right).
+        // assert(conflicts == 0)
+        // r.pull()  // Should conflict. We choose local (right).
+        // assert(conflicts == 1)
+        // r.push()  // No more conflicts.
+        // assert(conflicts == 1)
         // l.pull()  // Should conflict. We choose remote (left).
+        // assert(conflicts == 2)
         // l.push()  // No more conflicts.
         // r.push()  // No more conflicts.
         // assert(conflicts == 2)
@@ -241,9 +246,14 @@ class PluginTest {
         mockery.leftPush()
 
         mockery.rightPlugin.renames = listOf(modRename(genRename(0)))
+        assertEquals(conflicts, 0)
+        mockery.rightPull()
+        assertEquals(conflicts, 1)
         mockery.rightPush()
 
+        assertEquals(conflicts, 1)
         mockery.leftPull()
+        assertEquals(conflicts, 2)
         mockery.leftPush()
 
         mockery.rightPull()

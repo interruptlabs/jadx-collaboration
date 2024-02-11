@@ -9,6 +9,11 @@ try {
     Exit 2
 }
 
+git reset
+if ($LASTEXITCODE -ne 0) {
+    Exit 2
+}
+
 git add "$Repository"
 if ($LASTEXITCODE -ne 0) {
     Exit 2

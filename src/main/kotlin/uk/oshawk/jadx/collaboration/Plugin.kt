@@ -226,6 +226,7 @@ class Plugin(
 
         if (System.getProperty("os.name").lowercase(Locale.getDefault()).contains("win")) {
             command.add(0, "powershell.exe")
+            command.add(1, "-File")
         }
 
         command.add(script)
@@ -251,7 +252,6 @@ class Plugin(
                         LOG.warn { "Pre-pull script failed temporarily on try $i. Retrying." }
                     }
                 }
-
                 else -> {
                     LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting," }
                     return null

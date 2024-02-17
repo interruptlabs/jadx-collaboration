@@ -14,7 +14,7 @@ import org.mockito.kotlin.*
 import java.nio.file.Path
 import kotlin.io.path.*
 
-class PluginMockery(conflictResolver: ((remote: RemoteRename, local: LocalRename) -> Boolean)) {
+class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: RemoteRename, local: LocalRename) -> Boolean?) {
     val jadxCodeData = JadxCodeData()
     val jadxArgs = mock<JadxArgs> {
         on { codeData } doReturn jadxCodeData
@@ -58,7 +58,7 @@ class PluginMockery(conflictResolver: ((remote: RemoteRename, local: LocalRename
 }
 
 class RepositoryMockery(
-    conflictResolver: ((remote: RemoteRename, local: LocalRename) -> Boolean) = { _, _ -> fail("Conflict!") }
+    conflictResolver: (context: JadxPluginContext, remote: RemoteRename, local: LocalRename) -> Boolean? = { _, _, _ -> fail("Conflict!") }
 ) {
     val leftDirectory = createTempDirectory("left")
     val leftRemote = Path(leftDirectory.toString(), "repository")
@@ -238,7 +238,7 @@ class PluginTest {
         var conflicts = 0
 
         val mockery = RepositoryMockery() {
-            _, _ ->
+            _, _, _ ->
             conflicts++ % 2 != 0
         }
 

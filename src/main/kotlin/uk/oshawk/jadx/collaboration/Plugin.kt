@@ -14,7 +14,7 @@ import java.util.*
 
 class Plugin(
     // Use remote? Pluggable for testing. Currently, always use local. TODO: Actual conflict resolution (would need GUI).
-    val conflictResolver: (remote: RemoteRename, local: LocalRename) -> Boolean = { _, _ -> false },
+    val conflictResolver: (context: JadxPluginContext, remote: RemoteRename, local: LocalRename) -> Boolean? = ::dialogConflictResolver,
 ) : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
@@ -178,7 +178,7 @@ class Plugin(
                     } else {
                         // Conflict.
                         conflict = true
-                        if (conflictResolver(remoteRepositoryRename, oldLocalRepositoryRename)) {  // Use remote.
+                        if (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)!!) {  // Use remote. TODO: Handle null return.
                             LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)
                         } else {  // Use local.
                             LocalRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, remoteRepositoryRename.newName)

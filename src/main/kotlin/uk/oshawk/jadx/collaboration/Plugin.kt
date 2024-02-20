@@ -136,7 +136,7 @@ class Plugin(
         LOG.info { "projectToLocalRepository: ${localRepository.renames.size} new local repository renames" }
     }
 
-    private fun remoteRepositoryToLocalRepository(remoteRepository: RemoteRepository, localRepository: LocalRepository): Boolean {
+    private fun remoteRepositoryToLocalRepository(remoteRepository: RemoteRepository, localRepository: LocalRepository): Boolean? {
         var remoteRepositoryRenamesIndex = 0
         LOG.info { "remoteRepositoryToLocalRepository: ${remoteRepository.renames.size} remote repository renames" }
 
@@ -178,10 +178,13 @@ class Plugin(
                     } else {
                         // Conflict.
                         conflict = true
-                        if (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)!!) {  // Use remote. TODO: Handle null return.
-                            LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)
-                        } else {  // Use local.
-                            LocalRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, remoteRepositoryRename.newName)
+                        when (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)) {
+                            true -> LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)  // Use remote.
+                            false -> LocalRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, remoteRepositoryRename.newName)  // Use local.
+                            null -> {
+                                LOG.error { "Conflict resolution failed." }
+                                return null
+                            }
                         }
                     }
                 }
@@ -199,7 +202,7 @@ class Plugin(
 
         (this.context!!.args.codeData as JadxCodeData).renames = localRepository.renames
                 .filter { it.newName != null }
-                .map { ProjectRename(it.nodeRef, it.newName!!) }
+                .map { ProjectRename(it.nodeRef, it.newName!!).convert() }  // The convert is needed due to interface replacement. I wish it wasn't.
 
         LOG.info { "localRepositoryToProject: ${this.context!!.args.codeData.renames.size} new project renames" }
 
@@ -275,7 +278,7 @@ class Plugin(
 
         val remoteRepository = readRemoteRepository() ?: return
 
-        remoteRepositoryToLocalRepository(remoteRepository, localRepository)
+        remoteRepositoryToLocalRepository(remoteRepository, localRepository) ?: return
 
         writeLocalRepository(localRepository) ?: return
 
@@ -300,7 +303,7 @@ class Plugin(
                 remoteRepository = readRemoteRepository() ?: return
 
                 val conflict = remoteRepositoryToLocalRepository(remoteRepository, localRepository)
-            } while (conflict)
+            } while (conflict ?: return)
 
             localRepositoryToRemoteRepository(localRepository, remoteRepository)
 

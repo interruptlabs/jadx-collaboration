@@ -12,7 +12,7 @@ try {
 git pull
 if ($LASTEXITCODE -ne 0) {
     git merge --abort
-    Exit 2
+    Exit 3
 }
 
 Exit 0

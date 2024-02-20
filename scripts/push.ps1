@@ -11,21 +11,21 @@ try {
 
 git reset
 if ($LASTEXITCODE -ne 0) {
-    Exit 2
+    Exit 3
 }
 
 git add "$Repository"
 if ($LASTEXITCODE -ne 0) {
-    Exit 2
+    Exit 4
 }
 
 try {
-    git commit -m "Update $(Split-Path "$Repository" -Leaf -ErrorAction Stop) repository"
+    git commit --allow-empty -m "Update $(Split-Path "$Repository" -Leaf -ErrorAction Stop) repository"
 } catch {
-    Exit 2
+    Exit 5
 }
 if ($LASTEXITCODE -ne 0) {
-    Exit 2
+    Exit 6
 }
 
 git push

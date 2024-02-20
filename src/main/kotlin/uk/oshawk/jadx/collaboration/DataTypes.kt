@@ -2,6 +2,8 @@ package uk.oshawk.jadx.collaboration
 
 import jadx.api.data.ICodeRename
 import jadx.api.data.IJavaNodeRef
+import jadx.api.data.impl.JadxCodeRename
+import jadx.api.data.impl.JadxNodeRef
 
 class NodeRef(
         private val type: IJavaNodeRef.RefType,
@@ -21,6 +23,10 @@ class NodeRef(
     override fun getDeclaringClass() = declaringClass
     override fun getShortId() = shortId
     override fun compareTo(other: IJavaNodeRef?) = COMPARATOR.compare(this, other)
+
+    fun convert(): JadxNodeRef {
+        return JadxNodeRef(type, declaringClass, shortId)
+    }
 }
 
 class ProjectRename(private val nodeRef: NodeRef, private val newName: String) : ICodeRename {
@@ -35,6 +41,9 @@ class ProjectRename(private val nodeRef: NodeRef, private val newName: String) :
     override fun getNewName() = newName
     override fun compareTo(other: ICodeRename?) = COMPARATOR.compare(this, other)
 
+    fun convert(): JadxCodeRename {
+        return JadxCodeRename(nodeRef.convert(), newName)
+    }
 }
 
 data class LocalRename(val nodeRef: NodeRef, val newName: String?, val lastPullNewName: String?)

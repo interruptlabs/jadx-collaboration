@@ -25,7 +25,7 @@ fun getMainWindow(context: JadxPluginContext): JFrame {
     val commonContext = commonContextField.get(context.guiContext)
 
     val mainWindowField = Class.forName("jadx.gui.plugins.context.CommonGuiPluginsContext").getDeclaredField("mainWindow")
-    commonContextField.isAccessible = true
+    mainWindowField.isAccessible = true
     val mainWindow = mainWindowField.get(commonContext) as JFrame
 
     return mainWindow
@@ -41,7 +41,7 @@ class ConflictModal(parent: JFrame, remote: RemoteRename, local: LocalRename): J
     init {
         defaultCloseOperation = DISPOSE_ON_CLOSE
 
-        layout = GridLayout(1, 2)
+        contentPane = Box.createVerticalBox()
 
         val boldFont = SimpleAttributeSet()
         StyleConstants.setFontFamily(boldFont, "Monospaced")

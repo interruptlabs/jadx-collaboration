@@ -54,4 +54,74 @@ To push changes to the remote repository (will also pull), use `Plugins > Push` 
 
 ## Advanced Setup
 
-TODO
+If you want to use a distribution mechanism other than git, then you will have to write your own pre-pull and post-push scripts. This guidance, along with the git scripts should hopefully enable you to do so.
+
+### Purposes
+
+The purpose of the pre-pull script is to copy the repository file from a remote location to a local location.
+
+The purpose of the post-push script is to copy the repository file from a local location to the remote location.
+
+The main challenge is dealing with conflicts, which will be covered later.
+
+### Arguments
+
+Both scripts will be given a single argument, the path to the repository file (in the local location).
+
+### Exit Codes
+
+The exit codes of your scripts are important:
+
+- Zero represents success.
+- One represents temporary failure.
+- Any other number represents permanent failure.
+
+This is the flow of the pull operation:
+
+```mermaid
+flowchart TD
+	a([Start])
+	b[Run pre-pull script]
+	a --> b
+	b -- Temporary failure --> b
+	c[Do pull processing]
+	b -- Success --> c
+	d([End])
+	b -- Permanent failure --> d
+	c --> d
+```
+
+This is the flow of a push operation:
+
+```mermaid
+flowchart TD
+	a([Start])
+	b[Run pre-pull script]
+	a --> b
+	b -- Temporary failure --> b
+	c[Do pull processing]
+	b -- Success --> c
+	d[Do push processing]
+	c --> d
+	e[Run post-push script]
+	d --> e
+	e -- Temporary failure --> b
+	f([End])
+	b -- Permanent failure --> f
+	e -- Success --> f
+	e -- Permanent failure --> f
+```
+
+### Conflict
+
+A conflict occurs when the destination repository file is newer than the source repository file:
+
+- For the pre-pull script, this would mean that the repository file in the local location is newer than the repository file in the remote location. This should never occur, so the script should return a permanent failure error.
+- For the post-push script, this would mean that the repository file in the remote location is newer than the repository file in the local location. This could occur under normal circumstances so the script should:
+  - Restore the repository file to the state it was at the start of the operation.
+  - Return a temporary failure error.
+
+### General Notes
+
+- Along with the repository file, this plugin also uses the repository file with a `.local` suffix. This file should be ignored by your scripts and not copied to the remote location.
+

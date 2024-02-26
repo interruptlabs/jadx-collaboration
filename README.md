@@ -24,7 +24,7 @@ Start by creating a remote git repository that you and your collaborators will h
 
 Clone the remote repository to create a local version. If the repository has no commits, create one and push it (`git commit --allow-empty -m 'Initial commit' && git push`). *If you already have a local repository for JADX collaboration, this step can be skipped.*
 
-Download a pair of `pull` and `push` scripts from [here](/main/scripts) (`.ps1` for Windows and `.sh` for Mac or Linux). If you are using Mac or Linux, ensure the scripts are executable (`chmod +x pull.sh push.sh`). *If you already have pre-pull and post-push scripts downloaded, this step can be skipped.*
+Download a pair of `pull` and `push` scripts from [here](/scripts) (`.ps1` for Windows and `.sh` for Mac or Linux). If you are using Mac or Linux, ensure the scripts are executable (`chmod +x pull.sh push.sh`). *If you already have pre-pull and post-push scripts downloaded, this step can be skipped.*
 
 Now, in JADX-GUI:
 

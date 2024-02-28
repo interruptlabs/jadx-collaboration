@@ -51,6 +51,7 @@ To push changes to the remote repository (will also pull), use `Plugins > Push` 
 
 - Both pull and push operations reload files, which could be an issue for large projects. This could probably be solved by selectively sending events, but that would be far more complex that the current solution.
 - Currently only renames are shared. It would probably be possible to add comment sharing in the future.
+- The current method of internal conflict resolution could be improved by using timestamps.
 
 ## Advanced Setup
 

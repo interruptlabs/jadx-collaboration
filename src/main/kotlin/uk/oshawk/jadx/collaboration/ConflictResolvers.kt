@@ -57,7 +57,7 @@ class ConflictModal(parent: JFrame, remote: RemoteRename, local: LocalRename): J
         var width = 21
         width = max(width, remote.nodeRef.declaringClass.length)
         width = max(width, remote.nodeRef.shortId.length)
-        width = max(width, max(remoteNewName.length, localNewName.length) + 3)
+        width = max(width, max(remoteNewName.length, localNewName.length) * 2 + 3)
         width = width or 1  // Make odd for equal width columns.
 
         val text = JTextPane()

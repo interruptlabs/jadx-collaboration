@@ -51,7 +51,6 @@ To push changes to the remote repository (will also pull), use `Plugins > Push` 
 
 - Both pull and push operations reload files, which could be an issue for large projects. This could probably be solved by selectively sending events, but that would be far more complex that the current solution.
 - Currently only renames are shared. It would probably be possible to add comment sharing in the future.
-- The current method of internal conflict resolution could be improved by using timestamps.
 
 ## Advanced Setup
 
@@ -119,7 +118,7 @@ A conflict occurs when the destination repository file is newer than the source 
 
 - For the pre-pull script, this would mean that the repository file in the local location is newer than the repository file in the remote location. This should never occur, so the script should return a permanent failure error.
 - For the post-push script, this would mean that the repository file in the remote location is newer than the repository file in the local location. This could occur under normal circumstances so the script should:
-  - Restore the repository file to the state it was at the start of the operation.
+  - Restore the repository file in the local location to the state it was at the start of the operation.
   - Return a temporary failure error.
 
 ### General Notes

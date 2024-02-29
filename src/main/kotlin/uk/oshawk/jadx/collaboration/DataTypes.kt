@@ -4,6 +4,7 @@ import jadx.api.data.ICodeRename
 import jadx.api.data.IJavaNodeRef
 import jadx.api.data.impl.JadxCodeRename
 import jadx.api.data.impl.JadxNodeRef
+import java.util.UUID
 
 class NodeRef(
         private val type: IJavaNodeRef.RefType,
@@ -46,13 +47,13 @@ class ProjectRename(private val nodeRef: NodeRef, private val newName: String) :
     }
 }
 
-data class LocalRename(val nodeRef: NodeRef, val newName: String?, val lastPullNewName: String?)
+ data class RepositoryRename(val nodeRef: NodeRef, val newName: String?, val versionVector: MutableMap<UUID, Long>)
 
 class LocalRepository {
-    var renames = mutableListOf<LocalRename>()
+    var renames = mutableListOf<RepositoryRename>()
+    val uuid = UUID.randomUUID()
 }
 
-data class RemoteRename(val nodeRef: NodeRef, val newName: String?)
 class RemoteRepository {
-    var renames = mutableListOf<RemoteRename>()
+    var renames = mutableListOf<RepositoryRename>()
 }

@@ -31,11 +31,11 @@ fun getMainWindow(context: JadxPluginContext): JFrame {
     return mainWindow
 }
 
-fun useLocalConflictResolver(context: JadxPluginContext, remote: RemoteRename, local: LocalRename): Boolean {
+fun useLocalConflictResolver(context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename): Boolean {
     return false
 }
 
-class ConflictModal(parent: JFrame, remote: RemoteRename, local: LocalRename): JDialog(parent, "Conflict!", true) {
+class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryRename): JDialog(parent, "Conflict!", true) {
     var result: Boolean? = null
 
     init {
@@ -105,7 +105,7 @@ class ConflictModal(parent: JFrame, remote: RemoteRename, local: LocalRename): J
     }
 }
 
-fun dialogConflictResolver(context: JadxPluginContext, remote: RemoteRename, local: LocalRename): Boolean? {
+fun dialogConflictResolver(context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename): Boolean? {
     return ConflictModal(getMainWindow(context), remote, local).showModal()
 }
 

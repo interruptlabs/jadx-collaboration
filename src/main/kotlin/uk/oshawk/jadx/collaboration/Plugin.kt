@@ -11,10 +11,11 @@ import jadx.api.plugins.events.types.ReloadProject
 import java.io.File
 import java.io.FileNotFoundException
 import java.util.*
+import kotlin.math.max
 
 class Plugin(
     // Use remote? Pluggable for testing. Currently, always use local. TODO: Actual conflict resolution (would need GUI).
-    val conflictResolver: (context: JadxPluginContext, remote: RemoteRename, local: LocalRename) -> Boolean? = ::dialogConflictResolver,
+    val conflictResolver: (context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename) -> Boolean? = ::dialogConflictResolver,
 ) : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
@@ -105,17 +106,21 @@ class Plugin(
             val projectRename = projectRenames.getOrNull(projectRenamesIndex)
             val oldLocalRepositoryRename = oldLocalRepositoryRenames.getOrNull(oldLocalRepositoryRenamesIndex)
 
+            // We will need this in all but one case. Not the most efficient (especially with the clone), but this is not going to be the bottleneck.
+            val updatedVersionVector = oldLocalRepositoryRename?.versionVector?.toMutableMap() ?: mutableMapOf()
+            updatedVersionVector.merge(localRepository.uuid, 1L, Long::plus)
+
             localRepository.renames.add(when {
                 projectRename == null || (oldLocalRepositoryRename != null && projectRename.nodeRef > oldLocalRepositoryRename.nodeRef) -> {
                     // Local repository rename not present in project. Must have been deleted.
                     oldLocalRepositoryRenamesIndex++
-                    LocalRename(oldLocalRepositoryRename!!.nodeRef, null, oldLocalRepositoryRename.lastPullNewName)
+                    RepositoryRename(oldLocalRepositoryRename!!.nodeRef, null, updatedVersionVector)
                 }
 
                 oldLocalRepositoryRename == null || (projectRename != null && projectRename.nodeRef < oldLocalRepositoryRename.nodeRef) -> {
                     // Project rename not present in local repository. Add it.
                     projectRenamesIndex++
-                    LocalRename(NodeRef(projectRename.nodeRef), projectRename.newName, null)
+                    RepositoryRename(NodeRef(projectRename.nodeRef), projectRename.newName, updatedVersionVector)
                 }
 
                 else -> {
@@ -123,11 +128,11 @@ class Plugin(
                     oldLocalRepositoryRenamesIndex++
 
                     if (projectRename.newName == oldLocalRepositoryRename.newName) {
-                        // No change. Keep the local repository rename.
+                        // No change. Keep the local repository rename (no version vector change).
                         oldLocalRepositoryRename
                     } else {
-                        // Change. Replace with the project rename, preserving the last pull new name.
-                        LocalRename(NodeRef(projectRename.nodeRef), projectRename.newName, oldLocalRepositoryRename.lastPullNewName)
+                        // Change. Replace with the project rename.
+                        RepositoryRename(NodeRef(projectRename.nodeRef), projectRename.newName, updatedVersionVector)
                     }
                 }
             })
@@ -155,35 +160,64 @@ class Plugin(
                 remoteRepositoryRename == null || (oldLocalRepositoryRename != null && remoteRepositoryRename.nodeRef > oldLocalRepositoryRename.nodeRef) -> {
                     // Local repository rename not present in remote repository. Keep it as is.
                     oldLocalRepositoryRenamesIndex++
-                    assert(oldLocalRepositoryRename!!.lastPullNewName == null) // If a rename was deleted on remote, an entry should still be present, but with a null new name.
+                    assert(oldLocalRepositoryRename!!.versionVector.size == 1) // If a rename was deleted on remote, an entry should still be present, but with a null new name.
                     oldLocalRepositoryRename
                 }
 
                 oldLocalRepositoryRename == null || (remoteRepositoryRename != null && remoteRepositoryRename.nodeRef < oldLocalRepositoryRename.nodeRef) -> {
                     // Remote repository rename not present in local repository. Add it (again, deletions would be explicit),
                     remoteRepositoryRenamesIndex++
-                    LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)
+                    remoteRepositoryRename
                 }
 
                 else -> {
                     remoteRepositoryRenamesIndex++
                     oldLocalRepositoryRenamesIndex++
 
-                    if (remoteRepositoryRename.newName == oldLocalRepositoryRename.newName) {
-                        // No change. Update the last push new name just in case.
-                        LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)
-                    } else if (remoteRepositoryRename.newName == oldLocalRepositoryRename.lastPullNewName) {
-                        // Local repository rename supersedes remote repository rename. Use the local repository rename.
-                        oldLocalRepositoryRename
-                    } else {
-                        // Conflict.
-                        conflict = true
-                        when (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)) {
-                            true -> LocalRename(remoteRepositoryRename.nodeRef, remoteRepositoryRename.newName, remoteRepositoryRename.newName)  // Use remote.
-                            false -> LocalRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, remoteRepositoryRename.newName)  // Use local.
-                            null -> {
-                                LOG.error { "Conflict resolution failed." }
-                                return null
+                    // Compare version vectors and calculate the new one.
+                    var remoteRepositoryGreater = 0
+                    var oldLocalRepositoryGreater = 0
+                    val updatedVersionVector = mutableMapOf<UUID, Long>()
+                    for (key in remoteRepositoryRename.versionVector.keys.union(oldLocalRepositoryRename.versionVector.keys)) {
+                        val remoteRepositoryValue = remoteRepositoryRename.versionVector.getOrDefault(key, 0L)
+                        val oldLocalRepositoryValue = oldLocalRepositoryRename.versionVector.getOrDefault(key, 0L)
+
+                        if (remoteRepositoryValue > oldLocalRepositoryValue) {
+                            remoteRepositoryGreater++
+                        }
+
+                        if (oldLocalRepositoryValue > remoteRepositoryValue) {
+                            oldLocalRepositoryGreater++
+                        }
+
+                        updatedVersionVector[key] = max(remoteRepositoryValue, oldLocalRepositoryValue)
+                    }
+
+                    when {
+                        (remoteRepositoryGreater == 0 && oldLocalRepositoryGreater == 0)
+                        || remoteRepositoryRename.newName == oldLocalRepositoryRename.newName -> {
+                            // Equal in version vector or value. Use remote (including vector) since our version effectively hasn't updated.
+                            assert(remoteRepositoryRename.newName == oldLocalRepositoryRename.newName)
+                            remoteRepositoryRename
+                        }
+                        remoteRepositoryGreater == 0 -> {
+                            // Local supersedes remote. Use local. Local vector equals updated vector.
+                            oldLocalRepositoryRename
+                        }
+                        oldLocalRepositoryGreater == 0 -> {
+                            // Remote supersedes local. Use remote. Remote vector equals updated vector.
+                            remoteRepositoryRename
+                        }
+                        else -> {
+                            // Conflict. Try and resolve
+                            conflict = true
+                            when (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)) {
+                                true -> remoteRepositoryRename  // Use remote (including vector) since our version effectively hasn't updated.
+                                false -> RepositoryRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, updatedVersionVector)  // Use local with updated vector.
+                                null -> {
+                                    LOG.error { "Conflict resolution failed." }
+                                    return null
+                                }
                             }
                         }
                     }
@@ -211,13 +245,11 @@ class Plugin(
 
     private fun localRepositoryToRemoteRepository(localRepository: LocalRepository, remoteRepository: RemoteRepository) {
         // Overwrite the remote repository with the remote repository (remote should have been merged into local beforehand).
-        // Update the local repository last pull new names.
 
         LOG.info { "localRepositoryToRemoteRepository: ${localRepository.renames.size} local repository renames" }
         LOG.info { "localRepositoryToRemoteRepository: ${remoteRepository.renames.size} old remote repository renames" }
 
-        remoteRepository.renames = localRepository.renames.map { RemoteRename(it.nodeRef, it.newName) }.toMutableList()
-        localRepository.renames = localRepository.renames.map { LocalRename(it.nodeRef, it.newName, it.newName) }.toMutableList()
+        remoteRepository.renames = localRepository.renames
 
         LOG.info { "localRepositoryToRemoteRepository: ${remoteRepository.renames.size} new remote repository renames" }
     }

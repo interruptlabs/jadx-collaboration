@@ -14,7 +14,7 @@ import java.util.*
 import kotlin.math.max
 
 class Plugin(
-    // Use remote? Pluggable for testing. Currently, always use local. TODO: Actual conflict resolution (would need GUI).
+    // Use remote? Pluggable for testing.
     val conflictResolver: (context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename) -> Boolean? = ::dialogConflictResolver,
 ) : JadxPlugin {
     companion object {

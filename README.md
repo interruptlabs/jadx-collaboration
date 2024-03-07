@@ -14,7 +14,7 @@ In JADX-GUI:
 
 - Navigate to `File > Preferences > Plugins`.
 - Click `Install plugin`.
-- Enter `github:Oshawk:jadx-collaboration` as the `Location id`.
+- Enter `github:interruptlabs:jadx-collaboration` as the `Location id`.
 - Click `Install` and `Save`.
 - If there is a project open, use `File > Reload files`.
 

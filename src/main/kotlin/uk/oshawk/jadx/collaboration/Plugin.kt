@@ -58,7 +58,8 @@ class Plugin(
         } catch (_: FileNotFoundException) {
             LOG.info { "readRepository: using empty ${options.repository}$suffix" }
             default
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            LOG.info { e }
             LOG.error { "Repository file (${options.repository}$suffix) corrupt. Requires manual fixing." }
             null
         }
@@ -83,7 +84,8 @@ class Plugin(
         } catch (_: FileNotFoundException) {
             LOG.error { "Repository file (${options.repository}$suffix) invalid path." }
             null
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            LOG.info { e }
             LOG.error { "Repository file (${options.repository}$suffix) corrupt. Requires manual fixing." }
             null
         }
@@ -93,7 +95,9 @@ class Plugin(
     private fun writeRemoteRepository(repository: RemoteRepository) = writeRepository("", repository)
 
     private fun projectToLocalRepository(localRepository: LocalRepository) {
-        val projectRenames = this.context!!.args.codeData.renames.sorted()
+        val projectRenames = this.context!!.args.codeData.renames
+                .map { ProjectRename(it) }
+                .sorted()
         var projectRenamesIndex = 0
         LOG.info { "projectToLocalRepository: ${projectRenames.size} project renames" }
 
@@ -111,16 +115,16 @@ class Plugin(
             updatedVersionVector.merge(localRepository.uuid, 1L, Long::plus)
 
             localRepository.renames.add(when {
-                projectRename == null || (oldLocalRepositoryRename != null && projectRename.nodeRef > oldLocalRepositoryRename.nodeRef) -> {
+                projectRename == null || (oldLocalRepositoryRename != null && projectRename.identifier > oldLocalRepositoryRename.identifier) -> {
                     // Local repository rename not present in project. Must have been deleted.
                     oldLocalRepositoryRenamesIndex++
-                    RepositoryRename(oldLocalRepositoryRename!!.nodeRef, null, updatedVersionVector)
+                    RepositoryRename(oldLocalRepositoryRename!!.identifier, null, updatedVersionVector)
                 }
 
-                oldLocalRepositoryRename == null || (projectRename != null && projectRename.nodeRef < oldLocalRepositoryRename.nodeRef) -> {
+                oldLocalRepositoryRename == null || (projectRename != null && projectRename.identifier < oldLocalRepositoryRename.identifier) -> {
                     // Project rename not present in local repository. Add it.
                     projectRenamesIndex++
-                    RepositoryRename(NodeRef(projectRename.nodeRef), projectRename.newName, updatedVersionVector)
+                    RepositoryRename(projectRename.identifier, projectRename.newName, updatedVersionVector)
                 }
 
                 else -> {
@@ -132,7 +136,7 @@ class Plugin(
                         oldLocalRepositoryRename
                     } else {
                         // Change. Replace with the project rename.
-                        RepositoryRename(NodeRef(projectRename.nodeRef), projectRename.newName, updatedVersionVector)
+                        RepositoryRename(projectRename.identifier, projectRename.newName, updatedVersionVector)
                     }
                 }
             })
@@ -157,14 +161,14 @@ class Plugin(
             val oldLocalRepositoryRename = oldLocalRepositoryRenames.getOrNull(oldLocalRepositoryRenamesIndex)
 
             localRepository.renames.add(when {
-                remoteRepositoryRename == null || (oldLocalRepositoryRename != null && remoteRepositoryRename.nodeRef > oldLocalRepositoryRename.nodeRef) -> {
+                remoteRepositoryRename == null || (oldLocalRepositoryRename != null && remoteRepositoryRename.identifier > oldLocalRepositoryRename.identifier) -> {
                     // Local repository rename not present in remote repository. Keep it as is.
                     oldLocalRepositoryRenamesIndex++
                     assert(oldLocalRepositoryRename!!.versionVector.size == 1) // If a rename was deleted on remote, an entry should still be present, but with a null new name.
                     oldLocalRepositoryRename
                 }
 
-                oldLocalRepositoryRename == null || (remoteRepositoryRename != null && remoteRepositoryRename.nodeRef < oldLocalRepositoryRename.nodeRef) -> {
+                oldLocalRepositoryRename == null || (remoteRepositoryRename != null && remoteRepositoryRename.identifier < oldLocalRepositoryRename.identifier) -> {
                     // Remote repository rename not present in local repository. Add it (again, deletions would be explicit),
                     remoteRepositoryRenamesIndex++
                     remoteRepositoryRename
@@ -213,7 +217,7 @@ class Plugin(
                             conflict = true
                             when (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)) {
                                 true -> remoteRepositoryRename  // Use remote (including vector) since our version effectively hasn't updated.
-                                false -> RepositoryRename(oldLocalRepositoryRename.nodeRef, oldLocalRepositoryRename.newName, updatedVersionVector)  // Use local with updated vector.
+                                false -> RepositoryRename(oldLocalRepositoryRename.identifier, oldLocalRepositoryRename.newName, updatedVersionVector)  // Use local with updated vector.
                                 null -> {
                                     LOG.error { "Conflict resolution failed." }
                                     return null
@@ -236,7 +240,7 @@ class Plugin(
 
         (this.context!!.args.codeData as JadxCodeData).renames = localRepository.renames
                 .filter { it.newName != null }
-                .map { ProjectRename(it.nodeRef, it.newName!!).convert() }  // The convert is needed due to interface replacement. I wish it wasn't.
+                .map { ProjectRename(it.identifier, it.newName!!).convert() }  // The convert is needed due to interface replacement. I wish it wasn't.
 
         LOG.info { "localRepositoryToProject: ${this.context!!.args.codeData.renames.size} new project renames" }
 

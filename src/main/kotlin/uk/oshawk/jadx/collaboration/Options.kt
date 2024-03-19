@@ -25,5 +25,4 @@ class Options : BasePluginOptionsBuilder() {
                 .setter { v -> postPush = v }
                 .flags(OptionFlag.PER_PROJECT, OptionFlag.NOT_CHANGING_CODE)
     }
-
 }

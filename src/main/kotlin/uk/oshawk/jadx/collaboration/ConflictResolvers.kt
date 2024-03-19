@@ -55,19 +55,23 @@ class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryR
         val localNewName = local.newName ?: "NULL"
 
         var width = 21
-        width = max(width, remote.nodeRef.declaringClass.length)
-        width = max(width, remote.nodeRef.shortId.length)
+        width = max(width, remote.identifier.nodeRef.declaringClass.length)
+        width = max(width, remote.identifier.nodeRef.shortId.length)
         width = max(width, max(remoteNewName.length, localNewName.length) * 2 + 3)
         width = width or 1  // Make odd for equal width columns.
 
         val text = JTextPane()
 
         text.document.insertString(text.document.length, "Type:\n", boldFont)
-        text.document.insertString(text.document.length, "${remote.nodeRef.type}\n", normalFont)
+        text.document.insertString(text.document.length, "${remote.identifier.nodeRef.type}\n", normalFont)
         text.document.insertString(text.document.length, "Declaring Class:\n", boldFont)
-        text.document.insertString(text.document.length, "${remote.nodeRef.declaringClass}\n", normalFont)
+        text.document.insertString(text.document.length, "${remote.identifier.nodeRef.declaringClass}\n", normalFont)
         text.document.insertString(text.document.length, "Short ID:\n", boldFont)
-        text.document.insertString(text.document.length, "${remote.nodeRef.shortId}\n", normalFont)
+        text.document.insertString(text.document.length, "${remote.identifier.nodeRef.shortId}\n", normalFont)
+        text.document.insertString(text.document.length, "Attach Type:\n", boldFont)
+        text.document.insertString(text.document.length, "${remote.identifier.codeRef?.attachType}\n", normalFont)
+        text.document.insertString(text.document.length, "Index:\n", boldFont)
+        text.document.insertString(text.document.length, "${remote.identifier.codeRef?.index}\n", normalFont)
 
         text.document.insertString(text.document.length, "-".repeat(width) + "\n", normalFont)
         text.document.insertString(text.document.length, "New Name:", boldFont)

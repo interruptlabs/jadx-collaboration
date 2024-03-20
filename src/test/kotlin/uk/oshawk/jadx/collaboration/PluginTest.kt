@@ -52,9 +52,11 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
         plugin.init(jadxPluginContext)
     }
 
-    var renames: List<ICodeRename>
-        get() = jadxArgs.codeData.renames.sorted()  // For comparison.
-        set(value) { (jadxArgs.codeData as JadxCodeData).renames = value }
+    var renames: List<ProjectRename>
+        get() = jadxArgs.codeData.renames
+                .map { ProjectRename(it) }
+                .sorted()  // For comparison.
+        set(value) { (jadxArgs.codeData as JadxCodeData).renames = value.map { it.convert() } }
 }
 
 class RepositoryMockery(
@@ -128,9 +130,9 @@ class RepositoryMockery(
 }
 
 class PluginTest {
-    fun genRename(i: Int) = ProjectRename(NodeRef(IJavaNodeRef.RefType.CLASS, "a$i", "b$i"), "c$i")
+    fun genRename(i: Int) = ProjectRename(Identifier(NodeRef(IJavaNodeRef.RefType.CLASS, "a$i", "b$i"), null), "c$i")
 
-    fun modRename(rename: ProjectRename) = ProjectRename(rename.nodeRef, "${rename.newName}m", )
+    fun modRename(rename: ProjectRename) = ProjectRename(rename.identifier, "${rename.newName}m", )
 
     fun <T: Comparable<T>> assertIterableCompareTo0(left: Iterable<T>, right: Iterable<T>) {
 

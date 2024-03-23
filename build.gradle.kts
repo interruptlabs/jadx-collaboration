@@ -13,6 +13,12 @@ plugins {
 	id("com.github.ben-manes.versions") version "0.50.0"
 }
 
+repositories {
+	mavenCentral()
+	maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/")
+	google()
+}
+
 dependencies {
 	compileOnly(files("jadx.jar"))
 
@@ -26,12 +32,6 @@ dependencies {
 
 	testImplementation("org.slf4j:slf4j-simple:2.0.11")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
-}
-
-repositories {
-	mavenCentral()
-	maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/")
-	google()
 }
 
 java {

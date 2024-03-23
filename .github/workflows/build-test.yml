@@ -18,6 +18,14 @@ jobs:
           distribution: temurin
           java-version: 11
 
+      - name: Clone JADX
+        uses: actions/checkout@v4
+        with:
+          repository: skylot/jadx
+
+      - run: pwd
+      - run: ls
+
       - name: Build with Gradle
         uses: gradle/gradle-build-action@v2
         with:

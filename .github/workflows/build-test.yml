@@ -34,4 +34,4 @@ jobs:
         run: mv ./jadx/build/jadx/lib/jadx-dev-all.jar ./jadx-collaboration/jadx.jar
 
       - name: Test JADX Collaboration
-        run: ./jadx-collaboration && ./gradlew test
+        run: cd ./jadx-collaboration && ./gradlew test

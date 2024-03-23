@@ -1,6 +1,7 @@
 package uk.oshawk.jadx.collaboration
 
 import jadx.api.JadxArgs
+import jadx.api.JadxDecompiler
 import jadx.api.data.IJavaNodeRef
 import jadx.api.data.impl.JadxCodeData
 import jadx.api.plugins.JadxPluginContext
@@ -18,6 +19,10 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
     val jadxCodeData = JadxCodeData()
     val jadxArgs = mock<JadxArgs> {
         on { codeData } doReturn jadxCodeData
+    }
+
+    val jadxDecompiler = mock<JadxDecompiler> {
+        on { classes } doReturn listOf()
     }
 
     val iJadxEvents = mock<IJadxEvents> {
@@ -46,6 +51,7 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
     var options: Options? = null
     val jadxPluginContext = mock<JadxPluginContext> {
         on { args } doReturn jadxArgs
+        on { decompiler } doReturn jadxDecompiler
         on { events() } doReturn iJadxEvents
         on { guiContext } doReturn jadxGuiContext
         on { registerOptions(any()) } doAnswer { options = it.getArgument<Options>(0) }

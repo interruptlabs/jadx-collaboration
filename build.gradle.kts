@@ -22,9 +22,7 @@ dependencies {
 	testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
-	testImplementation("io.github.skylot:jadx-smali-input:1.5.0-SNAPSHOT") {
-		isChanging = true
-	}
+	testImplementation(files("jadx.jar"))
 
 	testImplementation("org.slf4j:slf4j-simple:2.0.11")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")

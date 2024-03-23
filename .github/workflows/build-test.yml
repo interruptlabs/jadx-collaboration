@@ -10,7 +10,7 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-      - name: Clone JADX Colaboration
+      - name: Clone JADX Collaboration
         uses: actions/checkout@v4
         with:
           path: jadx-collaboration
@@ -27,10 +27,11 @@ jobs:
           repository: skylot/jadx
           path: jadx
 
-      - run: pwd
-      - run: ls
+      - name: Build JADX
+        run: ./jadx/gradlew copyArtifacts
 
-      - name: Build with Gradle
-        uses: gradle/gradle-build-action@v2
-        with:
-          arguments: build -i
+      - name: Move jadx.jar
+        run: mv ./jadx/build/jadx/lib/jadx-dev-all.jar ./jadx-collaboration/jadx.jar
+
+      - name: Test JADX Collaboration
+        run: ./jadx-collaboration/gradlew test

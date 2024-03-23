@@ -49,7 +49,6 @@ To push changes to the remote repository (will also pull), use `Plugins > Push` 
 
 ## Limitations
 
-- Both pull and push operations reload files, which could be an issue for large projects. This could probably be solved by selectively sending events, but that would be far more complex that the current solution.
 - Currently only renames are shared. It would probably be possible to add comment sharing in the future.
 
 ## Advanced Setup
@@ -125,3 +124,8 @@ A conflict occurs when the destination repository file is newer than the source 
 
 - Along with the repository file, this plugin also uses the repository file with a `.local` suffix. This file should be ignored by your scripts and not copied to the remote location.
 
+# Building
+
+Building requires a full `jadx.jar` in the root of the project.
+
+Use `./gradlew dist` or `./gradlew.bat dist` to build.

@@ -1,13 +1,13 @@
 package uk.oshawk.jadx.collaboration
 
 import jadx.api.JadxArgs
-import jadx.api.data.ICodeRename
 import jadx.api.data.IJavaNodeRef
 import jadx.api.data.impl.JadxCodeData
 import jadx.api.plugins.JadxPluginContext
 import jadx.api.plugins.events.IJadxEvents
 import jadx.api.plugins.gui.JadxGuiContext
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
 import org.mockito.kotlin.*
@@ -31,8 +31,13 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
             val name = it.getArgument<String>(0)
             val action = it.getArgument<Runnable>(1)
             when (name) {
-                "Pull" -> { pull = action }
-                "Push" -> { push = action }
+                "Pull" -> {
+                    pull = action
+                }
+
+                "Push" -> {
+                    push = action
+                }
             }
         }
         on { uiRun(any()) } doAnswer { it.getArgument<Runnable>(0).run() }
@@ -54,13 +59,19 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
 
     var renames: List<ProjectRename>
         get() = jadxArgs.codeData.renames
-                .map { ProjectRename(it) }
-                .sorted()  // For comparison.
-        set(value) { (jadxArgs.codeData as JadxCodeData).renames = value.map { it.convert() } }
+            .map { ProjectRename(it) }
+            .sorted()  // For comparison.
+        set(value) {
+            (jadxArgs.codeData as JadxCodeData).renames = value.map { it.convert() }
+        }
 }
 
 class RepositoryMockery(
-    conflictResolver: (context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename) -> Boolean? = { _, _, _ -> fail("Conflict!") }
+    conflictResolver: (context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename) -> Boolean? = { _, _, _ ->
+        fail(
+            "Conflict!"
+        )
+    }
 ) {
     val leftDirectory = createTempDirectory("left")
     val leftRemote = Path(leftDirectory.toString(), "repository")
@@ -132,9 +143,9 @@ class RepositoryMockery(
 class PluginTest {
     fun genRename(i: Int) = ProjectRename(Identifier(NodeRef(IJavaNodeRef.RefType.CLASS, "a$i", "b$i"), null), "c$i")
 
-    fun modRename(rename: ProjectRename) = ProjectRename(rename.identifier, "${rename.newName}m", )
+    fun modRename(rename: ProjectRename) = ProjectRename(rename.identifier, "${rename.newName}m")
 
-    fun <T: Comparable<T>> assertIterableCompareTo0(left: Iterable<T>, right: Iterable<T>) {
+    fun <T : Comparable<T>> assertIterableCompareTo0(left: Iterable<T>, right: Iterable<T>) {
 
         val leftIterator = left.iterator()
         val rightIterator = right.iterator()
@@ -256,10 +267,9 @@ class PluginTest {
 
         var conflicts = 0
 
-        val mockery = RepositoryMockery {
-            _, _, _ ->
-                conflicts++
-                true
+        val mockery = RepositoryMockery { _, _, _ ->
+            conflicts++
+            true
         }
 
         mockery.leftPlugin.renames = listOf(genRename(0))

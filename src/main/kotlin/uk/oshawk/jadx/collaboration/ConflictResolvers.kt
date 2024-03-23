@@ -1,30 +1,22 @@
 package uk.oshawk.jadx.collaboration
 
 import jadx.api.plugins.JadxPluginContext
-import java.awt.GridBagConstraints
-import java.awt.GridBagLayout
 import java.awt.GridLayout
-import java.awt.Insets
-import javax.swing.Box
-import javax.swing.BoxLayout
-import javax.swing.JButton
-import javax.swing.JDialog
-import javax.swing.JFrame
-import javax.swing.JPanel
-import javax.swing.JTextPane
+import javax.swing.*
 import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
 import kotlin.math.max
-import kotlin.math.round
 
 fun getMainWindow(context: JadxPluginContext): JFrame {
     // TODO: This needs to be replaced. It is a travesty.
 
-    val commonContextField = Class.forName("jadx.gui.plugins.context.GuiPluginContext").getDeclaredField("commonContext")
+    val commonContextField =
+        Class.forName("jadx.gui.plugins.context.GuiPluginContext").getDeclaredField("commonContext")
     commonContextField.isAccessible = true
     val commonContext = commonContextField.get(context.guiContext)
 
-    val mainWindowField = Class.forName("jadx.gui.plugins.context.CommonGuiPluginsContext").getDeclaredField("mainWindow")
+    val mainWindowField =
+        Class.forName("jadx.gui.plugins.context.CommonGuiPluginsContext").getDeclaredField("mainWindow")
     mainWindowField.isAccessible = true
     val mainWindow = mainWindowField.get(commonContext) as JFrame
 
@@ -35,7 +27,8 @@ fun useLocalConflictResolver(context: JadxPluginContext, remote: RepositoryRenam
     return false
 }
 
-class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryRename): JDialog(parent, "Conflict!", true) {
+class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryRename) :
+    JDialog(parent, "Conflict!", true) {
     var result: Boolean? = null
 
     init {
@@ -56,7 +49,7 @@ class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryR
 
         var width = 21
         width = max(width, remote.identifier.nodeRef.declaringClass.length)
-        width = max(width, remote.identifier.nodeRef.shortId.length)
+        width = max(width, remote.identifier.nodeRef.shortId?.length ?: 4)
         width = max(width, max(remoteNewName.length, localNewName.length) * 2 + 3)
         width = width or 1  // Make odd for equal width columns.
 
@@ -77,7 +70,11 @@ class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryR
         text.document.insertString(text.document.length, "New Name:", boldFont)
         text.document.insertString(text.document.length, " ".repeat(width / 2 - 9) + "| ", normalFont)
         text.document.insertString(text.document.length, "New Name:\n", boldFont)
-        text.document.insertString(text.document.length, remoteNewName + " ".repeat(width / 2 - remoteNewName.length) + "| $localNewName", normalFont)
+        text.document.insertString(
+            text.document.length,
+            remoteNewName + " ".repeat(width / 2 - remoteNewName.length) + "| $localNewName",
+            normalFont
+        )
 
         add(text)
 

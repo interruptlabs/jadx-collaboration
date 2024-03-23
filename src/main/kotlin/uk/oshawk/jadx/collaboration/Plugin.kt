@@ -3,14 +3,21 @@ package uk.oshawk.jadx.collaboration
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import io.github.oshai.kotlinlogging.KotlinLogging
+import jadx.api.JavaClass
+import jadx.api.JavaNode
+import jadx.api.data.ICodeRename
+import jadx.api.data.IJavaNodeRef
 import jadx.api.data.impl.JadxCodeData
 import jadx.api.plugins.JadxPlugin
 import jadx.api.plugins.JadxPluginContext
 import jadx.api.plugins.JadxPluginInfo
-import jadx.api.plugins.events.types.ReloadProject
+import jadx.api.plugins.events.types.NodeRenamedByUser
+import jadx.gui.treemodel.JRenameNode
+import jadx.gui.ui.MainWindow
 import java.io.File
 import java.io.FileNotFoundException
 import java.util.*
+import javax.swing.Icon
 import kotlin.math.max
 
 class Plugin(
@@ -36,8 +43,14 @@ class Plugin(
         this.context?.guiContext?.addMenuAction("Pull") { this.context?.guiContext?.uiRun(this::pull) }
         this.context?.guiContext?.addMenuAction("Push") { this.context?.guiContext?.uiRun(this::push) }
 
-        this.context?.guiContext?.registerGlobalKeyBinding("$ID.pull", "ctrl BACK_SLASH") { this.context?.guiContext?.uiRun(this::pull) }
-        this.context?.guiContext?.registerGlobalKeyBinding("$ID.push", "ctrl shift BACK_SLASH") { this.context?.guiContext?.uiRun(this::push) }
+        this.context?.guiContext?.registerGlobalKeyBinding(
+            "$ID.pull",
+            "ctrl BACK_SLASH"
+        ) { this.context?.guiContext?.uiRun(this::pull) }
+        this.context?.guiContext?.registerGlobalKeyBinding(
+            "$ID.push",
+            "ctrl shift BACK_SLASH"
+        ) { this.context?.guiContext?.uiRun(this::push) }
     }
 
     private fun <R> readRepository(suffix: String, default: R): R? {
@@ -94,10 +107,19 @@ class Plugin(
     private fun writeLocalRepository(repository: LocalRepository) = writeRepository(".local", repository)
     private fun writeRemoteRepository(repository: RemoteRepository) = writeRepository("", repository)
 
+    private fun getProjectRenames(): List<ProjectRename> {
+        return this.context!!.args.codeData.renames
+            .map { ProjectRename(it) }
+            .sorted()
+    }
+
+    private fun setProjectRenames(projectRenames: List<ProjectRename>) {
+        (this.context!!.args.codeData as JadxCodeData).renames =
+            projectRenames.map { it.convert() }  // The convert is needed due to interface replacement. I wish it wasn't.
+    }
+
     private fun projectToLocalRepository(localRepository: LocalRepository) {
-        val projectRenames = this.context!!.args.codeData.renames
-                .map { ProjectRename(it) }
-                .sorted()
+        val projectRenames = getProjectRenames()
         var projectRenamesIndex = 0
         LOG.info { "projectToLocalRepository: ${projectRenames.size} project renames" }
 
@@ -114,38 +136,43 @@ class Plugin(
             val updatedVersionVector = oldLocalRepositoryRename?.versionVector?.toMutableMap() ?: mutableMapOf()
             updatedVersionVector.merge(localRepository.uuid, 1L, Long::plus)
 
-            localRepository.renames.add(when {
-                projectRename == null || (oldLocalRepositoryRename != null && projectRename.identifier > oldLocalRepositoryRename.identifier) -> {
-                    // Local repository rename not present in project. Must have been deleted.
-                    oldLocalRepositoryRenamesIndex++
-                    RepositoryRename(oldLocalRepositoryRename!!.identifier, null, updatedVersionVector)
-                }
+            localRepository.renames.add(
+                when {
+                    projectRename == null || (oldLocalRepositoryRename != null && projectRename.identifier > oldLocalRepositoryRename.identifier) -> {
+                        // Local repository rename not present in project. Must have been deleted.
+                        oldLocalRepositoryRenamesIndex++
+                        RepositoryRename(oldLocalRepositoryRename!!.identifier, null, updatedVersionVector)
+                    }
 
-                oldLocalRepositoryRename == null || (projectRename != null && projectRename.identifier < oldLocalRepositoryRename.identifier) -> {
-                    // Project rename not present in local repository. Add it.
-                    projectRenamesIndex++
-                    RepositoryRename(projectRename.identifier, projectRename.newName, updatedVersionVector)
-                }
-
-                else -> {
-                    projectRenamesIndex++
-                    oldLocalRepositoryRenamesIndex++
-
-                    if (projectRename.newName == oldLocalRepositoryRename.newName) {
-                        // No change. Keep the local repository rename (no version vector change).
-                        oldLocalRepositoryRename
-                    } else {
-                        // Change. Replace with the project rename.
+                    oldLocalRepositoryRename == null || (projectRename != null && projectRename.identifier < oldLocalRepositoryRename.identifier) -> {
+                        // Project rename not present in local repository. Add it.
+                        projectRenamesIndex++
                         RepositoryRename(projectRename.identifier, projectRename.newName, updatedVersionVector)
                     }
+
+                    else -> {
+                        projectRenamesIndex++
+                        oldLocalRepositoryRenamesIndex++
+
+                        if (projectRename.newName == oldLocalRepositoryRename.newName) {
+                            // No change. Keep the local repository rename (no version vector change).
+                            oldLocalRepositoryRename
+                        } else {
+                            // Change. Replace with the project rename.
+                            RepositoryRename(projectRename.identifier, projectRename.newName, updatedVersionVector)
+                        }
+                    }
                 }
-            })
+            )
         }
 
         LOG.info { "projectToLocalRepository: ${localRepository.renames.size} new local repository renames" }
     }
 
-    private fun remoteRepositoryToLocalRepository(remoteRepository: RemoteRepository, localRepository: LocalRepository): Boolean? {
+    private fun remoteRepositoryToLocalRepository(
+        remoteRepository: RemoteRepository,
+        localRepository: LocalRepository
+    ): Boolean? {
         var remoteRepositoryRenamesIndex = 0
         LOG.info { "remoteRepositoryToLocalRepository: ${remoteRepository.renames.size} remote repository renames" }
 
@@ -199,25 +226,32 @@ class Plugin(
 
                     when {
                         (remoteRepositoryGreater == 0 && oldLocalRepositoryGreater == 0)
-                        || remoteRepositoryRename.newName == oldLocalRepositoryRename.newName -> {
+                                || remoteRepositoryRename.newName == oldLocalRepositoryRename.newName -> {
                             // Equal in version vector or value. Use remote (including vector) since our version effectively hasn't updated.
                             assert(remoteRepositoryRename.newName == oldLocalRepositoryRename.newName)
                             remoteRepositoryRename
                         }
+
                         remoteRepositoryGreater == 0 -> {
                             // Local supersedes remote. Use local. Local vector equals updated vector.
                             oldLocalRepositoryRename
                         }
+
                         oldLocalRepositoryGreater == 0 -> {
                             // Remote supersedes local. Use remote. Remote vector equals updated vector.
                             remoteRepositoryRename
                         }
+
                         else -> {
                             // Conflict. Try and resolve
                             conflict = true
                             when (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)) {
                                 true -> remoteRepositoryRename  // Use remote (including vector) since our version effectively hasn't updated.
-                                false -> RepositoryRename(oldLocalRepositoryRename.identifier, oldLocalRepositoryRename.newName, updatedVersionVector)  // Use local with updated vector.
+                                false -> RepositoryRename(
+                                    oldLocalRepositoryRename.identifier,
+                                    oldLocalRepositoryRename.newName,
+                                    updatedVersionVector
+                                )  // Use local with updated vector.
                                 null -> {
                                     LOG.error { "Conflict resolution failed." }
                                     return null
@@ -235,19 +269,114 @@ class Plugin(
     }
 
     private fun localRepositoryToProject(localRepository: LocalRepository) {
+        val oldProjectRenames = getProjectRenames()
+
         LOG.info { "localRepositoryToProject: ${localRepository.renames.size} local repository renames" }
-        LOG.info { "localRepositoryToProject: ${this.context!!.args.codeData.renames.size} old project renames" }
+        LOG.info { "localRepositoryToProject: ${oldProjectRenames.size} old project renames" }
 
-        (this.context!!.args.codeData as JadxCodeData).renames = localRepository.renames
-                .filter { it.newName != null }
-                .map { ProjectRename(it.identifier, it.newName!!).convert() }  // The convert is needed due to interface replacement. I wish it wasn't.
+        val newProjectRenames = localRepository.renames
+            .filter { it.newName != null }
+            .map { ProjectRename(it.identifier, it.newName!!) }
 
-        LOG.info { "localRepositoryToProject: ${this.context!!.args.codeData.renames.size} new project renames" }
+        setProjectRenames(newProjectRenames)
 
-        context!!.events().send(ReloadProject::class.java.declaredFields.first().get(null) as ReloadProject)  // TODO: Change this when the singleton member name is stable.
+        LOG.info { "localRepositoryToProject: ${newProjectRenames.size} new project renames" }
+
+        val classNamesDelta = mutableSetOf<String>()
+        var oldProjectRenamesIndex = 0
+        var newProjectRenamesIndex = 0
+        while (oldProjectRenamesIndex != oldProjectRenames.size || newProjectRenamesIndex != newProjectRenames.size) {
+            val oldProjectRename = oldProjectRenames.getOrNull(oldProjectRenamesIndex)
+            val newProjectRename = newProjectRenames.getOrNull(newProjectRenamesIndex)
+
+            when {
+                (oldProjectRename == null || (newProjectRename != null && oldProjectRename > newProjectRename)) -> {
+                    classNamesDelta.add(newProjectRename!!.identifier.nodeRef.declaringClass)
+                    newProjectRenamesIndex++
+                }
+
+                (newProjectRename == null || (oldProjectRename != null && oldProjectRename < newProjectRename)) -> {
+                    classNamesDelta.add(oldProjectRename.identifier.nodeRef.declaringClass)
+                    oldProjectRenamesIndex++
+                }
+
+                else -> {
+                    oldProjectRenamesIndex++
+                    newProjectRenamesIndex++
+                }
+            }
+        }
+
+        LOG.info { "localRepositoryToProject: ${classNamesDelta.size} classes changed" }
+
+        val classesToUpdate = mutableListOf<JavaClass>()
+        for (clazz in context!!.decompiler.classes) {
+            if (classNamesDelta.any { classNameDelta -> clazz.rawName.startsWith(classNameDelta) } || clazz.dependencies.any { subClass ->
+                    classNamesDelta.any { classNameDelta ->
+                        subClass.rawName.startsWith(
+                            classNameDelta
+                        )
+                    }
+                }) {
+                classesToUpdate.add(clazz)
+            }
+        }
+
+        LOG.info { "localRepositoryToProject: ${classesToUpdate.size} classes to update" }
+
+        // A crafted rename node, with just enough implemented to get the classes we want to change to the rename service.
+        val renameNode = object : JRenameNode {
+            override fun getJavaNode(): JavaNode {
+                throw NotImplementedError()
+            }
+
+            override fun getTitle(): String {
+                throw NotImplementedError()
+            }
+
+            override fun getName(): String {
+                throw NotImplementedError()
+            }
+
+            override fun getIcon(): Icon {
+                throw NotImplementedError()
+            }
+
+            override fun canRename(): Boolean {
+                throw NotImplementedError()
+            }
+
+            // A rename that should be impossible under normal circumstances, so it does not break the list of renames.
+            override fun buildCodeRename(newName: String, renames: MutableSet<ICodeRename>) =
+                ProjectRename(Identifier(NodeRef(IJavaNodeRef.RefType.PKG, "#", "#"), null), "").convert()
+
+            override fun isValidName(newName: String): Boolean {
+                throw NotImplementedError()
+            }
+
+            override fun removeAlias() {}
+
+            override fun addUpdateNodes(toUpdate: MutableList<JavaNode>) {
+                toUpdate.addAll(classesToUpdate)
+            }
+
+            override fun reload(mainWindow: MainWindow) {
+                mainWindow.rebuildPackagesTree()
+                mainWindow.reloadTree()
+            }
+        }
+
+        val event = NodeRenamedByUser(null, "", "")
+        event.renameNode = renameNode
+        event.isResetName = true  // This will cause the rename not to be added to the list of renames.
+
+        context!!.events().send(event)
     }
 
-    private fun localRepositoryToRemoteRepository(localRepository: LocalRepository, remoteRepository: RemoteRepository) {
+    private fun localRepositoryToRemoteRepository(
+        localRepository: LocalRepository,
+        remoteRepository: RemoteRepository
+    ) {
         // Overwrite the remote repository with the remote repository (remote should have been merged into local beforehand).
 
         LOG.info { "localRepositoryToRemoteRepository: ${localRepository.renames.size} local repository renames" }
@@ -291,6 +420,7 @@ class Plugin(
                         LOG.warn { "Pre-pull script failed temporarily on try $i. Retrying." }
                     }
                 }
+
                 else -> {
                     LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting," }
                     return null

@@ -14,10 +14,7 @@ plugins {
 }
 
 dependencies {
-	// use compile only scope to exclude jadx-core and its dependencies from result jar
-	compileOnly("io.github.skylot:jadx-core:1.5.0-SNAPSHOT") {
-		isChanging = true
-	}
+	compileOnly(files("jadx.jar"))
 
 	implementation("io.github.oshai:kotlin-logging-jvm:5.1.0")
 	implementation("com.google.code.gson:gson:2.10.1")

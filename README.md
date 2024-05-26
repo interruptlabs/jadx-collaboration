@@ -43,10 +43,6 @@ To pull changes from the remote repository, use `Plugins > Pull` or `CTRL + \`.
 
 To push changes to the remote repository (will also pull), use `Plugins > Push` or `CTRL + SHIFT + \`.
 
-## Limitations
-
-- Currently only renames are shared. It would probably be possible to add comment sharing in the future.
-
 ## Advanced Setup
 
 If you want to use a distribution mechanism other than git, then you will have to write your own pre-pull and post-push scripts. This guidance, along with the git scripts should hopefully enable you to do so.

@@ -1,11 +1,15 @@
 package uk.oshawk.jadx.collaboration
 
 import jadx.api.plugins.JadxPluginContext
+import org.jetbrains.kotlin.backend.common.push
 import java.awt.GridLayout
 import javax.swing.*
 import javax.swing.text.SimpleAttributeSet
 import javax.swing.text.StyleConstants
 import kotlin.math.max
+import kotlin.math.min
+
+const val WRAP = 20
 
 fun getMainWindow(context: JadxPluginContext): JFrame {
     // TODO: This needs to be replaced. It is a travesty.
@@ -23,11 +27,11 @@ fun getMainWindow(context: JadxPluginContext): JFrame {
     return mainWindow
 }
 
-fun useLocalConflictResolver(context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename): Boolean {
+fun useLocalConflictResolver(context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem): Boolean {
     return false
 }
 
-class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryRename) :
+class ConflictModal(parent: JFrame, remote: RepositoryItem, local: RepositoryItem) :
     JDialog(parent, "Conflict!", true) {
     var result: Boolean? = null
 
@@ -44,13 +48,34 @@ class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryR
         StyleConstants.setFontFamily(normalFont, "Monospaced")
         StyleConstants.setBold(normalFont, false)
 
-        val remoteNewName = remote.newName ?: "NULL"
-        val localNewName = local.newName ?: "NULL"
+        val remoteChanges = mutableListOf<Pair<String, String>>()
+        val localChanges = mutableListOf<Pair<String, String>>()
+        when {
+            remote is RepositoryRename && local is RepositoryRename -> {
+                remoteChanges.push(Pair("New Name:", "${remote.newName}"))
+                localChanges.push(Pair("New Name:", "${local.newName}"))
+            }
 
-        var width = 21
+            remote is RepositoryComment && local is RepositoryComment -> {
+                remoteChanges.push(Pair("Comment:", "${remote.comment}"))
+                localChanges.push(Pair("Comment:", "${local.comment}"))
+
+                remoteChanges.push(Pair("Style:", "${remote.style}"))
+                localChanges.push(Pair("Style:", "${local.style}"))
+            }
+
+            else -> {
+                assert(false)
+            }
+        }
+
+        var width = 0
         width = max(width, remote.identifier.nodeRef.declaringClass.length)
         width = max(width, remote.identifier.nodeRef.shortId?.length ?: 4)
-        width = max(width, max(remoteNewName.length, localNewName.length) * 2 + 3)
+        for ((key, value) in remoteChanges + localChanges) {
+            width = max(width, key.length * 2 + 3)
+            width = max(width, min(value.length, WRAP) * 2 + 3) // Wrap after WRAP characters.
+        }
         width = width or 1  // Make odd for equal width columns.
 
         val text = JTextPane()
@@ -67,14 +92,33 @@ class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryR
         text.document.insertString(text.document.length, "${remote.identifier.codeRef?.index}\n", normalFont)
 
         text.document.insertString(text.document.length, "-".repeat(width) + "\n", normalFont)
-        text.document.insertString(text.document.length, "New Name:", boldFont)
-        text.document.insertString(text.document.length, " ".repeat(width / 2 - 9) + "| ", normalFont)
-        text.document.insertString(text.document.length, "New Name:\n", boldFont)
-        text.document.insertString(
-            text.document.length,
-            remoteNewName + " ".repeat(width / 2 - remoteNewName.length) + "| $localNewName",
-            normalFont
-        )
+        for ((remoteChange, localChange) in remoteChanges zip localChanges) {
+            val (remoteKey, remoteValue) = remoteChange
+            val (localKey, localValue) = localChange
+
+            text.document.insertString(text.document.length, remoteKey, boldFont)
+            text.document.insertString(
+                text.document.length,
+                " ".repeat(width / 2 - remoteKey.length) + "| ",
+                normalFont
+            )
+            text.document.insertString(text.document.length, "${localKey}\n", boldFont)
+
+            var remainingRemoteValue = remoteValue
+            var remainingLocalValue = localValue
+            while (remainingRemoteValue.isNotEmpty() || remainingLocalValue.isNotEmpty()) {
+                val currentRemoteValue = remainingRemoteValue.take(WRAP)
+                val currentLocalValue = remainingLocalValue.take(WRAP)
+                remainingRemoteValue = remainingRemoteValue.drop(WRAP)
+                remainingLocalValue = remainingLocalValue.drop(WRAP)
+                text.document.insertString(
+                    text.document.length,
+                    currentRemoteValue + " ".repeat(width / 2 - currentRemoteValue.length) + "| $currentLocalValue\n",
+                    normalFont
+                )
+            }
+
+        }
 
         add(text)
 
@@ -106,7 +150,7 @@ class ConflictModal(parent: JFrame, remote: RepositoryRename, local: RepositoryR
     }
 }
 
-fun dialogConflictResolver(context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename): Boolean? {
+fun dialogConflictResolver(context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem): Boolean? {
     return ConflictModal(getMainWindow(context), remote, local).showModal()
 }
 

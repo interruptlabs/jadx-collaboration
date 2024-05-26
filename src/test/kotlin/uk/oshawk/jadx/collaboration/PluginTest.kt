@@ -15,7 +15,7 @@ import org.mockito.kotlin.*
 import java.nio.file.Path
 import kotlin.io.path.*
 
-class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename) -> Boolean?) {
+class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem) -> Boolean?) {
     val jadxCodeData = JadxCodeData()
     val jadxArgs = mock<JadxArgs> {
         on { codeData } doReturn jadxCodeData
@@ -66,14 +66,14 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
     var renames: List<ProjectRename>
         get() = jadxArgs.codeData.renames
             .map { ProjectRename(it) }
-            .sorted()  // For comparison.
+            .sortedBy { it.identifier }  // For comparison.
         set(value) {
             (jadxArgs.codeData as JadxCodeData).renames = value.map { it.convert() }
         }
 }
 
 class RepositoryMockery(
-    conflictResolver: (context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename) -> Boolean? = { _, _, _ ->
+    conflictResolver: (context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem) -> Boolean? = { _, _, _ ->
         fail(
             "Conflict!"
         )
@@ -151,13 +151,14 @@ class PluginTest {
 
     fun modRename(rename: ProjectRename) = ProjectRename(rename.identifier, "${rename.newName}m")
 
-    fun <T : Comparable<T>> assertIterableCompareTo0(left: Iterable<T>, right: Iterable<T>) {
-
+    fun assertProjectRenamesEqual(left: Iterable<ProjectRename>, right: Iterable<ProjectRename>) {
         val leftIterator = left.iterator()
         val rightIterator = right.iterator()
-
         while (leftIterator.hasNext() && rightIterator.hasNext()) {
-            assertEquals(0, leftIterator.next().compareTo(rightIterator.next()), "Element mismatch in iterator.")
+            val leftNext = leftIterator.next()
+            val rightNext = rightIterator.next()
+            assertEquals(0, leftNext.identifier.compareTo(rightNext.identifier), "Element mismatch in iterator.")
+            assertEquals(leftNext.newName, rightNext.newName, "Element mismatch in iterator.")
         }
 
         assertFalse(leftIterator.hasNext(), "Size mismatch in iterator (left > right).")
@@ -179,8 +180,8 @@ class PluginTest {
 
         mockery.rightPull()
 
-        assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(genRename(0), genRename(1)))
-        assertIterableCompareTo0(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
+        assertProjectRenamesEqual(mockery.leftPlugin.renames, listOf(genRename(0), genRename(1)))
+        assertProjectRenamesEqual(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
     }
 
     @Test
@@ -203,13 +204,13 @@ class PluginTest {
         mockery.rightPlugin.renames = listOf(genRename(1))
         mockery.rightPush()
 
-        assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(genRename(0)))
-        assertIterableCompareTo0(mockery.rightPlugin.renames, listOf(genRename(0), genRename(1)))
+        assertProjectRenamesEqual(mockery.leftPlugin.renames, listOf(genRename(0)))
+        assertProjectRenamesEqual(mockery.rightPlugin.renames, listOf(genRename(0), genRename(1)))
 
         mockery.leftPull()
 
-        assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(genRename(0), genRename(1)))
-        assertIterableCompareTo0(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
+        assertProjectRenamesEqual(mockery.leftPlugin.renames, listOf(genRename(0), genRename(1)))
+        assertProjectRenamesEqual(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
     }
 
     @Test
@@ -232,8 +233,8 @@ class PluginTest {
 
         mockery.rightPull()
 
-        assertIterableCompareTo0(mockery.leftPlugin.renames, listOf(modRename(genRename(0))))
-        assertIterableCompareTo0(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
+        assertProjectRenamesEqual(mockery.leftPlugin.renames, listOf(modRename(genRename(0))))
+        assertProjectRenamesEqual(mockery.leftPlugin.renames, mockery.rightPlugin.renames)
     }
 
     //

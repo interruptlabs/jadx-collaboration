@@ -22,7 +22,7 @@ import kotlin.math.max
 
 class Plugin(
     // Use remote? Pluggable for testing.
-    val conflictResolver: (context: JadxPluginContext, remote: RepositoryRename, local: RepositoryRename) -> Boolean? = ::dialogConflictResolver,
+    val conflictResolver: (context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem) -> Boolean? = ::dialogConflictResolver,
 ) : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
@@ -110,7 +110,7 @@ class Plugin(
     private fun getProjectRenames(): List<ProjectRename> {
         return this.context!!.args.codeData.renames
             .map { ProjectRename(it) }
-            .sorted()
+            .sortedBy { it.identifier }
     }
 
     private fun setProjectRenames(projectRenames: List<ProjectRename>) {
@@ -118,100 +118,130 @@ class Plugin(
             projectRenames.map { it.convert() }  // The convert is needed due to interface replacement. I wish it wasn't.
     }
 
-    private fun projectToLocalRepository(localRepository: LocalRepository) {
-        val projectRenames = getProjectRenames()
-        var projectRenamesIndex = 0
-        LOG.info { "projectToLocalRepository: ${projectRenames.size} project renames" }
+    private fun getProjectComments(): List<ProjectComment> {
+        return this.context!!.args.codeData.comments
+            .map { ProjectComment(it) }
+            .sortedBy { it.identifier }
+    }
 
-        val oldLocalRepositoryRenames = localRepository.renames
-        var oldLocalRepositoryRenamesIndex = 0
-        localRepository.renames = mutableListOf()
-        LOG.info { "projectToLocalRepository: ${oldLocalRepositoryRenames.size} old local repository renames" }
+    private fun setProjectComments(projectComments: List<ProjectComment>) {
+        (this.context!!.args.codeData as JadxCodeData).comments =
+            projectComments.map { it.convert() }  // The convert is needed due to interface replacement. I wish it wasn't.
+    }
 
-        while (projectRenamesIndex != projectRenames.size || oldLocalRepositoryRenamesIndex != oldLocalRepositoryRenames.size) {
-            val projectRename = projectRenames.getOrNull(projectRenamesIndex)
-            val oldLocalRepositoryRename = oldLocalRepositoryRenames.getOrNull(oldLocalRepositoryRenamesIndex)
+    private fun projectToLocalRepositoryInternal(
+        localRepositoryUuid: UUID,
+        projectItems: List<ProjectItem>,
+        oldLocalRepositoryItems: List<RepositoryItem>
+    ): List<RepositoryItem> {
+        var projectItemsIndex = 0
+        var oldLocalRepositoryItemsIndex = 0
+        val newLocalRepositoryItems = mutableListOf<RepositoryItem>()
+
+        while (projectItemsIndex != projectItems.size || oldLocalRepositoryItemsIndex != oldLocalRepositoryItems.size) {
+            val projectItem = projectItems.getOrNull(projectItemsIndex)
+            val oldLocalRepositoryItem = oldLocalRepositoryItems.getOrNull(oldLocalRepositoryItemsIndex)
 
             // We will need this in all but one case. Not the most efficient (especially with the clone), but this is not going to be the bottleneck.
-            val updatedVersionVector = oldLocalRepositoryRename?.versionVector?.toMutableMap() ?: mutableMapOf()
-            updatedVersionVector.merge(localRepository.uuid, 1L, Long::plus)
+            val updatedVersionVector = oldLocalRepositoryItem?.versionVector?.toMutableMap() ?: mutableMapOf()
+            updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
 
-            localRepository.renames.add(
+            newLocalRepositoryItems.add(
                 when {
-                    projectRename == null || (oldLocalRepositoryRename != null && projectRename.identifier > oldLocalRepositoryRename.identifier) -> {
-                        // Local repository rename not present in project. Must have been deleted.
-                        oldLocalRepositoryRenamesIndex++
-                        RepositoryRename(oldLocalRepositoryRename!!.identifier, null, updatedVersionVector)
+                    projectItem == null || (oldLocalRepositoryItem != null && projectItem.identifier > oldLocalRepositoryItem.identifier) -> {
+                        // Local repository item not present in project. Must have been deleted.
+                        oldLocalRepositoryItemsIndex++
+                        oldLocalRepositoryItem!!.deleted(updatedVersionVector)
                     }
 
-                    oldLocalRepositoryRename == null || (projectRename != null && projectRename.identifier < oldLocalRepositoryRename.identifier) -> {
-                        // Project rename not present in local repository. Add it.
-                        projectRenamesIndex++
-                        RepositoryRename(projectRename.identifier, projectRename.newName, updatedVersionVector)
+                    oldLocalRepositoryItem == null || (projectItem != null && projectItem.identifier < oldLocalRepositoryItem.identifier) -> {
+                        // Project item not present in local repository. Add it.
+                        projectItemsIndex++
+                        projectItem.repositoryItem(updatedVersionVector)
                     }
 
                     else -> {
-                        projectRenamesIndex++
-                        oldLocalRepositoryRenamesIndex++
+                        projectItemsIndex++
+                        oldLocalRepositoryItemsIndex++
 
-                        if (projectRename.newName == oldLocalRepositoryRename.newName) {
-                            // No change. Keep the local repository rename (no version vector change).
-                            oldLocalRepositoryRename
+                        if (projectItem.matches(oldLocalRepositoryItem)) {
+                            // No change. Keep the local repository item (no version vector change).
+                            oldLocalRepositoryItem
                         } else {
-                            // Change. Replace with the project rename.
-                            RepositoryRename(projectRename.identifier, projectRename.newName, updatedVersionVector)
+                            // Change. Replace with the project item.
+                            projectItem.repositoryItem(updatedVersionVector)
                         }
                     }
                 }
             )
         }
 
-        LOG.info { "projectToLocalRepository: ${localRepository.renames.size} new local repository renames" }
+        return newLocalRepositoryItems
     }
 
-    private fun remoteRepositoryToLocalRepository(
-        remoteRepository: RemoteRepository,
-        localRepository: LocalRepository
-    ): Boolean? {
-        var remoteRepositoryRenamesIndex = 0
-        LOG.info { "remoteRepositoryToLocalRepository: ${remoteRepository.renames.size} remote repository renames" }
+    private fun projectToLocalRepository(localRepository: LocalRepository) {
+        val projectRenames = getProjectRenames()
+        LOG.info { "projectToLocalRepository: ${projectRenames.size} project renames" }
+        LOG.info { "projectToLocalRepository: ${localRepository.renames.size} old local repository renames" }
 
-        val oldLocalRepositoryRenames = localRepository.renames
-        var oldLocalRepositoryRenamesIndex = 0
-        localRepository.renames = mutableListOf()
-        LOG.info { "remoteRepositoryToLocalRepository: ${oldLocalRepositoryRenames.size} old local repository renames" }
+        localRepository.renames =
+            projectToLocalRepositoryInternal(localRepository.uuid, projectRenames, localRepository.renames)
+                .map { it as RepositoryRename }
+                .toMutableList()
 
+        LOG.info { "projectToLocalRepository: ${localRepository.renames.size} new local repository renames" }
+
+        val projectComments = getProjectComments()
+        LOG.info { "projectToLocalRepository: ${projectComments.size} project comments" }
+
+        LOG.info { "projectToLocalRepository: ${localRepository.comments.size} old local repository comments" }
+
+        localRepository.comments =
+            projectToLocalRepositoryInternal(localRepository.uuid, projectComments, localRepository.comments)
+                .map { it as RepositoryComment }
+                .toMutableList()
+
+        LOG.info { "projectToLocalRepository: ${localRepository.comments.size} new local repository comments" }
+    }
+
+    private fun remoteRepositoryToLocalRepositoryInternal(
+        remoteRepositoryItems: List<RepositoryItem>,
+        oldLocalRepositoryItems: List<RepositoryItem>
+    ): Pair<List<RepositoryItem>, Boolean>? {
+        var remoteRepositoryItemsIndex = 0
+        var oldLocalRepositoryItemsIndex = 0
+        val newLocalRepositoryItems = mutableListOf<RepositoryItem>()
         var conflict = false
 
-        while (remoteRepositoryRenamesIndex != remoteRepository.renames.size || oldLocalRepositoryRenamesIndex != oldLocalRepositoryRenames.size) {
-            val remoteRepositoryRename = remoteRepository.renames.getOrNull(remoteRepositoryRenamesIndex)
-            val oldLocalRepositoryRename = oldLocalRepositoryRenames.getOrNull(oldLocalRepositoryRenamesIndex)
+        while (remoteRepositoryItemsIndex != remoteRepositoryItems.size || oldLocalRepositoryItemsIndex != oldLocalRepositoryItems.size) {
+            val remoteRepositoryItem = remoteRepositoryItems.getOrNull(remoteRepositoryItemsIndex)
+            val oldLocalRepositoryItem = oldLocalRepositoryItems.getOrNull(oldLocalRepositoryItemsIndex)
 
-            localRepository.renames.add(when {
-                remoteRepositoryRename == null || (oldLocalRepositoryRename != null && remoteRepositoryRename.identifier > oldLocalRepositoryRename.identifier) -> {
-                    // Local repository rename not present in remote repository. Keep it as is.
-                    oldLocalRepositoryRenamesIndex++
-                    assert(oldLocalRepositoryRename!!.versionVector.size == 1) // If a rename was deleted on remote, an entry should still be present, but with a null new name.
-                    oldLocalRepositoryRename
+            newLocalRepositoryItems.add(when {
+                remoteRepositoryItem == null || (oldLocalRepositoryItem != null && remoteRepositoryItem.identifier > oldLocalRepositoryItem.identifier) -> {
+                    // Local repository item not present in remote repository. Keep it as is.
+                    oldLocalRepositoryItemsIndex++
+                    assert(oldLocalRepositoryItem!!.versionVector.size == 1) // If an item was deleted on remote, an entry should still be present, but with a null new name.
+                    oldLocalRepositoryItem
                 }
 
-                oldLocalRepositoryRename == null || (remoteRepositoryRename != null && remoteRepositoryRename.identifier < oldLocalRepositoryRename.identifier) -> {
-                    // Remote repository rename not present in local repository. Add it (again, deletions would be explicit),
-                    remoteRepositoryRenamesIndex++
-                    remoteRepositoryRename
+                oldLocalRepositoryItem == null || (remoteRepositoryItem != null && remoteRepositoryItem.identifier < oldLocalRepositoryItem.identifier) -> {
+                    // Remote repository item not present in local repository. Add it (again, deletions would be explicit),
+                    remoteRepositoryItemsIndex++
+                    remoteRepositoryItem
                 }
 
                 else -> {
-                    remoteRepositoryRenamesIndex++
-                    oldLocalRepositoryRenamesIndex++
+                    remoteRepositoryItemsIndex++
+                    oldLocalRepositoryItemsIndex++
 
                     // Compare version vectors and calculate the new one.
                     var remoteRepositoryGreater = 0
                     var oldLocalRepositoryGreater = 0
                     val updatedVersionVector = mutableMapOf<UUID, Long>()
-                    for (key in remoteRepositoryRename.versionVector.keys.union(oldLocalRepositoryRename.versionVector.keys)) {
-                        val remoteRepositoryValue = remoteRepositoryRename.versionVector.getOrDefault(key, 0L)
-                        val oldLocalRepositoryValue = oldLocalRepositoryRename.versionVector.getOrDefault(key, 0L)
+                    for (key in remoteRepositoryItem.versionVector.keys.union(oldLocalRepositoryItem.versionVector.keys)) {
+                        val remoteRepositoryValue = remoteRepositoryItem.versionVector.getOrDefault(key, 0L)
+                        val oldLocalRepositoryValue = oldLocalRepositoryItem.versionVector.getOrDefault(key, 0L)
 
                         if (remoteRepositoryValue > oldLocalRepositoryValue) {
                             remoteRepositoryGreater++
@@ -226,32 +256,28 @@ class Plugin(
 
                     when {
                         (remoteRepositoryGreater == 0 && oldLocalRepositoryGreater == 0)
-                                || remoteRepositoryRename.newName == oldLocalRepositoryRename.newName -> {
+                                || remoteRepositoryItem.matches(oldLocalRepositoryItem) -> {
                             // Equal in version vector or value. Use remote (including vector) since our version effectively hasn't updated.
-                            assert(remoteRepositoryRename.newName == oldLocalRepositoryRename.newName)
-                            remoteRepositoryRename
+                            assert(remoteRepositoryItem.matches(oldLocalRepositoryItem))
+                            remoteRepositoryItem
                         }
 
                         remoteRepositoryGreater == 0 -> {
                             // Local supersedes remote. Use local. Local vector equals updated vector.
-                            oldLocalRepositoryRename
+                            oldLocalRepositoryItem
                         }
 
                         oldLocalRepositoryGreater == 0 -> {
                             // Remote supersedes local. Use remote. Remote vector equals updated vector.
-                            remoteRepositoryRename
+                            remoteRepositoryItem
                         }
 
                         else -> {
                             // Conflict. Try and resolve
                             conflict = true
-                            when (conflictResolver(context!!, remoteRepositoryRename, oldLocalRepositoryRename)) {
-                                true -> remoteRepositoryRename  // Use remote (including vector) since our version effectively hasn't updated.
-                                false -> RepositoryRename(
-                                    oldLocalRepositoryRename.identifier,
-                                    oldLocalRepositoryRename.newName,
-                                    updatedVersionVector
-                                )  // Use local with updated vector.
+                            when (conflictResolver(context!!, remoteRepositoryItem, oldLocalRepositoryItem)) {
+                                true -> remoteRepositoryItem  // Use remote (including vector) since our version effectively hasn't updated.
+                                false -> oldLocalRepositoryItem.updated(updatedVersionVector)  // Use local with updated vector.
                                 null -> {
                                     LOG.error { "Conflict resolution failed." }
                                     return null
@@ -263,61 +289,120 @@ class Plugin(
             })
         }
 
+        return Pair(newLocalRepositoryItems, conflict)
+    }
+
+    private fun remoteRepositoryToLocalRepository(
+        remoteRepository: RemoteRepository,
+        localRepository: LocalRepository
+    ): Boolean? {
+        var conflict = false
+
+        LOG.info { "remoteRepositoryToLocalRepository: ${remoteRepository.renames.size} remote repository renames" }
+        LOG.info { "remoteRepositoryToLocalRepository: ${localRepository.renames.size} old local repository renames" }
+
+        val renamesResult = remoteRepositoryToLocalRepositoryInternal(remoteRepository.renames, localRepository.renames)
+        if (renamesResult == null) {
+            return null
+        } else {
+            val (renames, newConflict) = renamesResult
+            localRepository.renames = renames
+                .map { it as RepositoryRename }
+                .toMutableList()
+            conflict = conflict or newConflict
+        }
+
         LOG.info { "remoteRepositoryToLocalRepository: ${localRepository.renames.size} new local repository renames" }
+
+        LOG.info { "remoteRepositoryToLocalRepository: ${remoteRepository.comments.size} remote repository comments" }
+        LOG.info { "remoteRepositoryToLocalRepository: ${localRepository.comments.size} old local repository comments" }
+
+        val commentsResult =
+            remoteRepositoryToLocalRepositoryInternal(remoteRepository.comments, localRepository.comments)
+        if (commentsResult == null) {
+            return null
+        } else {
+            val (comments, newConflict) = commentsResult
+            localRepository.comments = comments
+                .map { it as RepositoryComment }
+                .toMutableList()
+            conflict = conflict or newConflict
+        }
+
+        LOG.info { "remoteRepositoryToLocalRepository: ${localRepository.comments.size} new local repository comments" }
 
         return conflict
     }
 
-    private fun localRepositoryToProject(localRepository: LocalRepository) {
-        val oldProjectRenames = getProjectRenames()
-
-        LOG.info { "localRepositoryToProject: ${localRepository.renames.size} local repository renames" }
-        LOG.info { "localRepositoryToProject: ${oldProjectRenames.size} old project renames" }
-
-        val newProjectRenames = localRepository.renames
-            .filter { it.newName != null }
-            .map { ProjectRename(it.identifier, it.newName!!) }
-
-        setProjectRenames(newProjectRenames)
-
-        LOG.info { "localRepositoryToProject: ${newProjectRenames.size} new project renames" }
-
+    private fun localRepositoryToProjectInternal(
+        oldProjectItems: List<ProjectItem>,
+        newProjectItems: List<ProjectItem>
+    ): Set<String> {
         val classNamesDelta = mutableSetOf<String>()
-        var oldProjectRenamesIndex = 0
-        var newProjectRenamesIndex = 0
-        while (oldProjectRenamesIndex != oldProjectRenames.size || newProjectRenamesIndex != newProjectRenames.size) {
-            val oldProjectRename = oldProjectRenames.getOrNull(oldProjectRenamesIndex)
-            val newProjectRename = newProjectRenames.getOrNull(newProjectRenamesIndex)
+        var oldProjectItemsIndex = 0
+        var newProjectItemsIndex = 0
+        while (oldProjectItemsIndex != oldProjectItems.size || newProjectItemsIndex != newProjectItems.size) {
+            val oldProjectItem = oldProjectItems.getOrNull(oldProjectItemsIndex)
+            val newProjectItem = newProjectItems.getOrNull(newProjectItemsIndex)
 
             when {
-                (oldProjectRename == null || (newProjectRename != null && oldProjectRename > newProjectRename)) -> {
-                    classNamesDelta.add(newProjectRename!!.identifier.nodeRef.declaringClass)
-                    newProjectRenamesIndex++
+                (oldProjectItem == null || (newProjectItem != null && oldProjectItem.identifier > newProjectItem.identifier)) -> {
+                    classNamesDelta.add(newProjectItem!!.identifier.nodeRef.declaringClass.substringBefore("$"))
+                    newProjectItemsIndex++
                 }
 
-                (newProjectRename == null || (oldProjectRename != null && oldProjectRename < newProjectRename)) -> {
-                    classNamesDelta.add(oldProjectRename.identifier.nodeRef.declaringClass)
-                    oldProjectRenamesIndex++
+                (newProjectItem == null || (oldProjectItem != null && oldProjectItem.identifier < newProjectItem.identifier)) -> {
+                    classNamesDelta.add(oldProjectItem.identifier.nodeRef.declaringClass.substringBefore("$"))
+                    oldProjectItemsIndex++
                 }
 
                 else -> {
-                    oldProjectRenamesIndex++
-                    newProjectRenamesIndex++
+                    if (!oldProjectItem.matches(newProjectItem)) {
+                        classNamesDelta.add(oldProjectItem.identifier.nodeRef.declaringClass.substringBefore("$"))
+                    }
+
+                    oldProjectItemsIndex++
+                    newProjectItemsIndex++
                 }
             }
         }
+
+        return classNamesDelta
+    }
+
+    private fun shouldUpdate(query: String, delta: String): Boolean {
+        return query == delta
+                || query.startsWith("$delta.")  // Delta is a parent package of query.
+                || query.startsWith("$delta$")  // Delta is a parent class of query.
+    }
+
+    private fun localRepositoryToProject(localRepository: LocalRepository) {
+        val oldProjectRenames = getProjectRenames()
+        LOG.info { "localRepositoryToProject: ${localRepository.renames.size} local repository renames" }
+        LOG.info { "localRepositoryToProject: ${oldProjectRenames.size} old project renames" }
+
+        val newProjectRenames = localRepository.renames.mapNotNull { it.convert() }
+        setProjectRenames(newProjectRenames)
+        LOG.info { "localRepositoryToProject: ${newProjectRenames.size} new project renames" }
+
+        val oldProjectComments = getProjectComments()
+        LOG.info { "localRepositoryToProject: ${localRepository.comments.size} local repository comments" }
+        LOG.info { "localRepositoryToProject: ${oldProjectComments.size} old project comments" }
+
+        val newProjectComments = localRepository.comments.mapNotNull { it.convert() }
+        setProjectComments(newProjectComments)
+        LOG.info { "localRepositoryToProject: ${newProjectComments.size} new project comments" }
+
+        val classNamesDelta = mutableSetOf<String>()
+        classNamesDelta.addAll(localRepositoryToProjectInternal(oldProjectRenames, newProjectRenames))
+        classNamesDelta.addAll(localRepositoryToProjectInternal(oldProjectComments, newProjectComments))
 
         LOG.info { "localRepositoryToProject: ${classNamesDelta.size} classes changed" }
 
         val classesToUpdate = mutableListOf<JavaClass>()
         for (clazz in context!!.decompiler.classes) {
-            if (classNamesDelta.any { classNameDelta -> clazz.rawName.startsWith(classNameDelta) } || clazz.dependencies.any { subClass ->
-                    classNamesDelta.any { classNameDelta ->
-                        subClass.rawName.startsWith(
-                            classNameDelta
-                        )
-                    }
-                }) {
+            if (classNamesDelta.any { classNameDelta -> shouldUpdate(clazz.rawName, classNameDelta) } || clazz.dependencies.any { subClass ->
+                    classNamesDelta.any { classNameDelta -> shouldUpdate(subClass.rawName, classNameDelta) } }) {
                 classesToUpdate.add(clazz)
             }
         }
@@ -385,6 +470,13 @@ class Plugin(
         remoteRepository.renames = localRepository.renames
 
         LOG.info { "localRepositoryToRemoteRepository: ${remoteRepository.renames.size} new remote repository renames" }
+
+        LOG.info { "localRepositoryToRemoteRepository: ${localRepository.comments.size} local repository comments" }
+        LOG.info { "localRepositoryToRemoteRepository: ${remoteRepository.comments.size} old remote repository comments" }
+
+        remoteRepository.comments = localRepository.comments
+
+        LOG.info { "localRepositoryToRemoteRepository: ${remoteRepository.comments.size} new remote repository comments" }
     }
 
     private fun runScript(script: String): Int {

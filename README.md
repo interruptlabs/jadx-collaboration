@@ -4,7 +4,7 @@ A plugin to enable users to collaborate on a JADX-GUI project.
 
 ## Installation
 
-This plugin currently requires [JADX](https://github.com/skylot/jadx) 1.5.0 or greater.
+This plugin requires [JADX](https://github.com/skylot/jadx) 1.5.0 or greater.
 
 In JADX-GUI:
 

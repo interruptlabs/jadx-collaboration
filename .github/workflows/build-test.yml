@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone JADX Collaboration
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: jadx-collaboration
 
@@ -22,7 +22,7 @@ jobs:
           java-version: 11
 
       - name: Clone JADX
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: skylot/jadx
           path: jadx

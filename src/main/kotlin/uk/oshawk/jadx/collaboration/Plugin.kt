@@ -498,8 +498,10 @@ class Plugin(
         val command = mutableListOf<String>()
 
         if (System.getProperty("os.name").lowercase(Locale.getDefault()).contains("win")) {
-            command.add(0, "powershell.exe")
-            command.add(1, "-File")
+            command.add("powershell.exe")
+            command.add("-ExecutionPolicy")
+            command.add("Bypass")
+            command.add("-File")
         }
 
         command.add(script)

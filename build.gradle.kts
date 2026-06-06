@@ -13,6 +13,10 @@ plugins {
 	id("com.github.ben-manes.versions") version "0.50.0"
 }
 
+kotlin {
+    jvmToolchain(11)
+}
+
 repositories {
 	mavenCentral()
 	maven(url = "https://s01.oss.sonatype.org/content/repositories/snapshots/")
@@ -32,11 +36,6 @@ dependencies {
 
 	testImplementation("org.slf4j:slf4j-simple:2.0.11")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
-}
-
-java {
-	sourceCompatibility = JavaVersion.VERSION_11
-	targetCompatibility = JavaVersion.VERSION_11
 }
 
 noArg {

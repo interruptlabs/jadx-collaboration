@@ -1,8 +1,6 @@
 package uk.oshawk.jadx.collaboration
 
 import jadx.api.plugins.JadxPluginContext
-import jadx.gui.plugins.context.GuiPluginContext
-import jadx.gui.ui.MainWindow
 import java.awt.GridLayout
 import javax.swing.*
 import javax.swing.text.SimpleAttributeSet
@@ -11,10 +9,6 @@ import kotlin.math.max
 import kotlin.math.min
 
 const val WRAP = 20
-
-fun getMainWindow(context: JadxPluginContext): MainWindow {
-    return (context.guiContext as GuiPluginContext).commonContext.mainWindow
-}
 
 fun useLocalConflictResolver(context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem): Boolean {
     return false

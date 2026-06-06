@@ -57,7 +57,7 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
         on { registerOptions(any()) } doAnswer { options = it.getArgument<Options>(0) }
     }
 
-    val plugin = Plugin(conflictResolver)
+    val plugin = Plugin(conflictResolver, ::doNothingSaver)
 
     init {
         plugin.init(jadxPluginContext)

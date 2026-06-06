@@ -2,6 +2,7 @@ package uk.oshawk.jadx.collaboration
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import io.github.oshai.kotlinlogging.KLogger
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jadx.api.JavaClass
 import jadx.api.JavaNode
@@ -26,6 +27,7 @@ import kotlin.math.max
 class Plugin(
     // Use remote? Pluggable for testing.
     val conflictResolver: (context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem) -> Boolean? = ::dialogConflictResolver,
+    val saver: (context: JadxPluginContext, logger: KLogger) -> Unit? = ::projectSaver,
 ) : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
@@ -546,6 +548,8 @@ class Plugin(
         // Pull remote repository into local repository.
         // Update project from local repository.
 
+        saver(context!!, LOG) ?: return
+
         val localRepository = readLocalRepository() ?: return
 
         projectToLocalRepository(localRepository)
@@ -559,11 +563,15 @@ class Plugin(
         writeLocalRepository(localRepository) ?: return
 
         localRepositoryToProject(localRepository)
+
+        saver(context!!, LOG)
     }
 
     private fun push() {
         // Update local repository with project changes.
         // Pull remote repository into local repository until there is no conflict.
+
+        saver(context!!, LOG) ?: return
 
         var localRepository: LocalRepository? = null
         for (i in 1..5) {
@@ -607,6 +615,8 @@ class Plugin(
         writeLocalRepository(localRepository!!) ?: return
 
         localRepositoryToProject(localRepository)
+
+        saver(context!!, LOG)
     }
 
     private fun pullGuarded() {

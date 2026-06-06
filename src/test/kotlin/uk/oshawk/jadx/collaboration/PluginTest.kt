@@ -81,11 +81,17 @@ class RepositoryMockery(
 ) {
     val leftDirectory = createTempDirectory("left")
     val leftRemote = Path(leftDirectory.toString(), "repository")
-    val leftLocal = Path(leftDirectory.toString(), "repository.local")
+    val leftLocal = Path(
+        leftDirectory.toString(),
+        "repository.0000000000000000000000000000000000000000000000000000000000000000.local"
+    )
 
     val rightDirectory = createTempDirectory("right")
     val rightRemote = Path(rightDirectory.toString(), "repository")
-    val rightLocal = Path(rightDirectory.toString(), "repository.local")
+    val rightLocal = Path(
+        rightDirectory.toString(),
+        "repository.0000000000000000000000000000000000000000000000000000000000000000.local"
+    )
 
     val remoteDirectory = createTempDirectory("remote")
     val remote = Path(remoteDirectory.toString(), "repository")

@@ -27,7 +27,7 @@ import kotlin.math.max
 class Plugin(
     // Use remote? Pluggable for testing.
     val conflictResolver: (context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem) -> Boolean? = ::dialogConflictResolver,
-    val saver: (context: JadxPluginContext, logger: KLogger) -> Unit? = ::projectSaver,
+    val saver: (context: JadxPluginContext, logger: KLogger) -> String? = ::projectSaver,
 ) : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
@@ -86,7 +86,7 @@ class Plugin(
         }
     }
 
-    private fun readLocalRepository() = readRepository(".local", LocalRepository())
+    private fun readLocalRepository(identifier: String) = readRepository(".$identifier.local", LocalRepository())
     private fun readRemoteRepository() = readRepository("", RemoteRepository())
 
     private fun <R> writeRepository(suffix: String, repository: R): Unit? {
@@ -112,7 +112,9 @@ class Plugin(
         }
     }
 
-    private fun writeLocalRepository(repository: LocalRepository) = writeRepository(".local", repository)
+    private fun writeLocalRepository(identifier: String, repository: LocalRepository) =
+        writeRepository(".$identifier.local", repository)
+
     private fun writeRemoteRepository(repository: RemoteRepository) = writeRepository("", repository)
 
     private fun getProjectRenames(): List<ProjectRename> {
@@ -548,9 +550,9 @@ class Plugin(
         // Pull remote repository into local repository.
         // Update project from local repository.
 
-        saver(context!!, LOG) ?: return
+        val identifier = saver(context!!, LOG) ?: return
 
-        val localRepository = readLocalRepository() ?: return
+        val localRepository = readLocalRepository(identifier) ?: return
 
         projectToLocalRepository(localRepository)
 
@@ -560,7 +562,7 @@ class Plugin(
 
         remoteRepositoryToLocalRepository(remoteRepository, localRepository) ?: return
 
-        writeLocalRepository(localRepository) ?: return
+        writeLocalRepository(identifier, localRepository) ?: return
 
         localRepositoryToProject(localRepository)
 
@@ -571,11 +573,11 @@ class Plugin(
         // Update local repository with project changes.
         // Pull remote repository into local repository until there is no conflict.
 
-        saver(context!!, LOG) ?: return
+        val identifier = saver(context!!, LOG) ?: return
 
         var localRepository: LocalRepository? = null
         for (i in 1..5) {
-            localRepository = readLocalRepository() ?: return
+            localRepository = readLocalRepository(identifier) ?: return
 
             projectToLocalRepository(localRepository)
 
@@ -612,7 +614,7 @@ class Plugin(
         }
 
         // Think it is a good idea to do this after the script. If something goes wrong, the on-disk local repository should allow us to recover.
-        writeLocalRepository(localRepository!!) ?: return
+        writeLocalRepository(identifier, localRepository!!) ?: return
 
         localRepositoryToProject(localRepository)
 

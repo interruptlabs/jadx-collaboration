@@ -196,7 +196,7 @@ class RepositoryComment(
 
     fun convert(): ProjectComment? {
         if (comment == null || style == null) {
-            assert(comment == null && style == null)  // Both or neither should be null.
+            check(comment == null && style == null) { "UNEXPECTED - Both or neither of comment and style should be null." }
             return null
         }
 

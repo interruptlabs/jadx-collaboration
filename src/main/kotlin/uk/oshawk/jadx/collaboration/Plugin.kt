@@ -228,7 +228,7 @@ class Plugin(
                     remoteRepositoryItem == null || (oldLocalRepositoryItem != null && remoteRepositoryItem.identifier > oldLocalRepositoryItem.identifier) -> {
                         // Local repository item not present in remote repository. Keep it as is.
                         oldLocalRepositoryItemsIndex++
-                        assert(oldLocalRepositoryItem!!.versionVector.size == 1) // If an item was deleted on remote, an entry should still be present, but with a null new name.
+                        check(oldLocalRepositoryItem!!.versionVector.size == 1) { "UNEXPECTED - If an item was deleted on remote, an entry should still be present, but with a null new name." }
                         oldLocalRepositoryItem
                     }
 
@@ -265,7 +265,7 @@ class Plugin(
                             (remoteRepositoryGreater == 0 && oldLocalRepositoryGreater == 0)
                                     || remoteRepositoryItem.matches(oldLocalRepositoryItem) -> {
                                 // Equal in version vector or value. Use remote (including vector) since our version effectively hasn't updated.
-                                assert(remoteRepositoryItem.matches(oldLocalRepositoryItem))
+                                check(remoteRepositoryItem.matches(oldLocalRepositoryItem)) { "UNEXPECTED - Version vectors match but items don't." }
                                 remoteRepositoryItem
                             }
 

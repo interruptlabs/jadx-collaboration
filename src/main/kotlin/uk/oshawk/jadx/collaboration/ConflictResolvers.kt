@@ -64,7 +64,7 @@ class ConflictModal(parent: JFrame, remote: RepositoryItem, local: RepositoryIte
             }
 
             else -> {
-                assert(false)
+                check(false) { "UNEXPECTED - Type mismatch between local and remote." }
             }
         }
 

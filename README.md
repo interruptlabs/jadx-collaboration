@@ -16,7 +16,7 @@ In JADX-GUI:
 
 ## Setup
 
-Start by creating a remote git repository that you and your collaborators will have access to. *If you already have a remote repository for JADX collaboration, this step can be skipped.*
+Start by creating a remote git repository that you and your collaborators will have access to. This repository should only be used for JADX Collaboration (using it for other purposes may lead to data loss). *If you already have a remote repository for JADX collaboration, this step can be skipped.*
 
 Clone the remote repository to create a local version. If the repository has no commits, create one and push it (`git commit --allow-empty -m 'Initial commit' && git push`). *If you already have a local repository for JADX collaboration, this step can be skipped.*
 

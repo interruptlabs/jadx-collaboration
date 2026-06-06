@@ -1,6 +1,8 @@
 package uk.oshawk.jadx.collaboration
 
 import jadx.api.plugins.JadxPluginContext
+import jadx.gui.plugins.context.GuiPluginContext
+import jadx.gui.ui.MainWindow
 import java.awt.GridLayout
 import javax.swing.*
 import javax.swing.text.SimpleAttributeSet
@@ -10,20 +12,8 @@ import kotlin.math.min
 
 const val WRAP = 20
 
-fun getMainWindow(context: JadxPluginContext): JFrame {
-    // TODO: This needs to be replaced. It is a travesty.
-
-    val commonContextField =
-        Class.forName("jadx.gui.plugins.context.GuiPluginContext").getDeclaredField("commonContext")
-    commonContextField.isAccessible = true
-    val commonContext = commonContextField.get(context.guiContext)
-
-    val mainWindowField =
-        Class.forName("jadx.gui.plugins.context.CommonGuiPluginsContext").getDeclaredField("mainWindow")
-    mainWindowField.isAccessible = true
-    val mainWindow = mainWindowField.get(commonContext) as JFrame
-
-    return mainWindow
+fun getMainWindow(context: JadxPluginContext): MainWindow {
+    return (context.guiContext as GuiPluginContext).commonContext.mainWindow
 }
 
 fun useLocalConflictResolver(context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem): Boolean {

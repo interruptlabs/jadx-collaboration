@@ -532,7 +532,7 @@ class Plugin(
                 }
 
                 else -> {
-                    LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting," }
+                    LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting." }
                     return null
                 }
             }
@@ -597,7 +597,7 @@ class Plugin(
                 }
 
                 else -> {
-                    LOG.error { "Post-push script failed permanently with exit code $exitCode on try number $i. Aborting," }
+                    LOG.error { "Post-push script failed permanently with exit code $exitCode on try number $i. Aborting." }
                     return
                 }
             }

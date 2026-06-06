@@ -156,10 +156,16 @@ class Plugin(
                 when {
                     projectItem == null || (oldLocalRepositoryItem != null && projectItem.identifier > oldLocalRepositoryItem.identifier) -> {
                         // Local repository item not present in project. Must have been deleted.
-                        val updatedVersionVector = oldLocalRepositoryItem!!.versionVector.toMutableMap()
-                        updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
                         oldLocalRepositoryItemsIndex++
-                        oldLocalRepositoryItem.deleted(updatedVersionVector)
+                        if (oldLocalRepositoryItem!!.isDeleted()) {
+                            // Local repository is already marked as deleted (no version vector change).
+                            oldLocalRepositoryItem
+                        } else {
+                            // Local repository is not marked as deleted, do so.
+                            val updatedVersionVector = oldLocalRepositoryItem.versionVector.toMutableMap()
+                            updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
+                            oldLocalRepositoryItem.deleted(updatedVersionVector)
+                        }
                     }
 
                     oldLocalRepositoryItem == null || (projectItem != null && projectItem.identifier < oldLocalRepositoryItem.identifier) -> {

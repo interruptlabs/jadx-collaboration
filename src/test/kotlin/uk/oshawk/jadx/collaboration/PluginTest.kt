@@ -443,4 +443,23 @@ class PluginTest {
         mockery.rightPush()
     }
 
+    @Test
+    fun regression1() {
+        // Designed to catch a bug in projectToLocalRepository where a deleted rename's version vector is updated every time.
+
+        val mockery = RepositoryMockery()
+
+        mockery.leftPlugin.renames = listOf(genRename(0))
+        mockery.leftPush()
+
+        mockery.leftPlugin.renames = listOf()
+        mockery.leftPush()
+
+        mockery.rightPull()
+
+        mockery.rightPlugin.renames = listOf(genRename(0))
+        mockery.rightPush()
+
+        mockery.leftPull()  // Should not conflict but does due to the mistakenly updated version vector.
+    }
 }

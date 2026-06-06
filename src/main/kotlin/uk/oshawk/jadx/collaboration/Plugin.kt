@@ -19,6 +19,8 @@ import java.io.FileNotFoundException
 import java.util.*
 import java.util.concurrent.TimeUnit
 import javax.swing.Icon
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.max
 
 class Plugin(
@@ -34,6 +36,9 @@ class Plugin(
     private val options = Options()
     private var context: JadxPluginContext? = null
 
+    @OptIn(ExperimentalAtomicApi::class)
+    private var running = AtomicBoolean(false)
+
     override fun getPluginInfo() = JadxPluginInfo(ID, "JADX Collaboration", "Collaboration support for JADX")
 
     override fun init(context: JadxPluginContext?) {
@@ -41,17 +46,17 @@ class Plugin(
 
         this.context?.registerOptions(options)
 
-        this.context?.guiContext?.addMenuAction("Pull") { this.context?.guiContext?.uiRun(this::pull) }
-        this.context?.guiContext?.addMenuAction("Push") { this.context?.guiContext?.uiRun(this::push) }
+        this.context?.guiContext?.addMenuAction("Pull") { this.context?.guiContext?.uiRun(this::pullGuarded) }
+        this.context?.guiContext?.addMenuAction("Push") { this.context?.guiContext?.uiRun(this::pushGuarded) }
 
         this.context?.guiContext?.registerGlobalKeyBinding(
             "$ID.pull",
             "ctrl BACK_SLASH"
-        ) { this.context?.guiContext?.uiRun(this::pull) }
+        ) { this.context?.guiContext?.uiRun(this::pullGuarded) }
         this.context?.guiContext?.registerGlobalKeyBinding(
             "$ID.push",
             "ctrl shift BACK_SLASH"
-        ) { this.context?.guiContext?.uiRun(this::push) }
+        ) { this.context?.guiContext?.uiRun(this::pushGuarded) }
     }
 
     private fun <R> readRepository(suffix: String, default: R): R? {
@@ -600,5 +605,35 @@ class Plugin(
         writeLocalRepository(localRepository!!) ?: return
 
         localRepositoryToProject(localRepository)
+    }
+
+    private fun pullGuarded() {
+        @OptIn(ExperimentalAtomicApi::class)
+        if (running.exchange(true)) {
+            LOG.error { "A pull or push is already running." }
+            return
+        }
+
+        try {
+            pull()
+        } finally {
+            @OptIn(ExperimentalAtomicApi::class)
+            running.store(false)
+        }
+    }
+
+    private fun pushGuarded() {
+        @OptIn(ExperimentalAtomicApi::class)
+        if (running.exchange(true)) {
+            LOG.error { "A pull or push is already running." }
+            return
+        }
+
+        try {
+            push()
+        } finally {
+            @OptIn(ExperimentalAtomicApi::class)
+            running.store(false)
+        }
     }
 }

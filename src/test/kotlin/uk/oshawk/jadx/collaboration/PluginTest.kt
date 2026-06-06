@@ -57,7 +57,7 @@ class PluginMockery(conflictResolver: (context: JadxPluginContext, remote: Repos
         on { registerOptions(any()) } doAnswer { options = it.getArgument<Options>(0) }
     }
 
-    val plugin = Plugin(conflictResolver)
+    val plugin = Plugin(conflictResolver, ::doNothingSaver)
 
     init {
         plugin.init(jadxPluginContext)
@@ -81,11 +81,17 @@ class RepositoryMockery(
 ) {
     val leftDirectory = createTempDirectory("left")
     val leftRemote = Path(leftDirectory.toString(), "repository")
-    val leftLocal = Path(leftDirectory.toString(), "repository.local")
+    val leftLocal = Path(
+        leftDirectory.toString(),
+        "repository.0000000000000000000000000000000000000000000000000000000000000000.local"
+    )
 
     val rightDirectory = createTempDirectory("right")
     val rightRemote = Path(rightDirectory.toString(), "repository")
-    val rightLocal = Path(rightDirectory.toString(), "repository.local")
+    val rightLocal = Path(
+        rightDirectory.toString(),
+        "repository.0000000000000000000000000000000000000000000000000000000000000000.local"
+    )
 
     val remoteDirectory = createTempDirectory("remote")
     val remote = Path(remoteDirectory.toString(), "repository")
@@ -412,5 +418,48 @@ class PluginTest {
         mockery.leftPlugin.renames = listOf(modRename(genRename(0)))
         mockery.leftPush()
         assertEquals(1, conflicts)
+    }
+
+    //
+    // The following tests for regressions to bugs that have been fixed.
+    //
+
+    @Test
+    fun regression0() {
+        // Designed to catch a bug in projectToLocalRepository, where:
+        // - Local repository has a rename B.
+        // - Project has renames A and B.
+        // - Rename A mistakenly inherits B's version vector since they are both at index 0.
+        // - This eventually causes a crash in remoteRepositoryToLocalRepositoryInternal at the check() line.
+
+        val mockery = RepositoryMockery()
+
+        mockery.leftPlugin.renames = listOf(genRename(1))
+        mockery.leftPush()
+
+        mockery.rightPull()
+
+        mockery.rightPlugin.renames += listOf(genRename(0))
+        mockery.rightPush()
+    }
+
+    @Test
+    fun regression1() {
+        // Designed to catch a bug in projectToLocalRepository where a deleted rename's version vector is updated every time.
+
+        val mockery = RepositoryMockery()
+
+        mockery.leftPlugin.renames = listOf(genRename(0))
+        mockery.leftPush()
+
+        mockery.leftPlugin.renames = listOf()
+        mockery.leftPush()
+
+        mockery.rightPull()
+
+        mockery.rightPlugin.renames = listOf(genRename(0))
+        mockery.rightPush()
+
+        mockery.leftPull()  // Should not conflict but does due to the mistakenly updated version vector.
     }
 }

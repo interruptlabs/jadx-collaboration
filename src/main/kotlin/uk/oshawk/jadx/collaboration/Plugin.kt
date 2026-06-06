@@ -2,6 +2,7 @@ package uk.oshawk.jadx.collaboration
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import io.github.oshai.kotlinlogging.KLogger
 import io.github.oshai.kotlinlogging.KotlinLogging
 import jadx.api.JavaClass
 import jadx.api.JavaNode
@@ -17,12 +18,16 @@ import jadx.gui.ui.MainWindow
 import java.io.File
 import java.io.FileNotFoundException
 import java.util.*
+import java.util.concurrent.TimeUnit
 import javax.swing.Icon
+import kotlin.concurrent.atomics.AtomicBoolean
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.math.max
 
 class Plugin(
     // Use remote? Pluggable for testing.
     val conflictResolver: (context: JadxPluginContext, remote: RepositoryItem, local: RepositoryItem) -> Boolean? = ::dialogConflictResolver,
+    val saver: (context: JadxPluginContext, logger: KLogger) -> String? = ::projectSaver,
 ) : JadxPlugin {
     companion object {
         const val ID = "jadx-collaboration"
@@ -33,6 +38,9 @@ class Plugin(
     private val options = Options()
     private var context: JadxPluginContext? = null
 
+    @OptIn(ExperimentalAtomicApi::class)
+    private var running = AtomicBoolean(false)
+
     override fun getPluginInfo() = JadxPluginInfo(ID, "JADX Collaboration", "Collaboration support for JADX")
 
     override fun init(context: JadxPluginContext?) {
@@ -40,17 +48,17 @@ class Plugin(
 
         this.context?.registerOptions(options)
 
-        this.context?.guiContext?.addMenuAction("Pull") { this.context?.guiContext?.uiRun(this::pull) }
-        this.context?.guiContext?.addMenuAction("Push") { this.context?.guiContext?.uiRun(this::push) }
+        this.context?.guiContext?.addMenuAction("Pull") { this.context?.guiContext?.uiRun(this::pullGuarded) }
+        this.context?.guiContext?.addMenuAction("Push") { this.context?.guiContext?.uiRun(this::pushGuarded) }
 
         this.context?.guiContext?.registerGlobalKeyBinding(
             "$ID.pull",
             "ctrl BACK_SLASH"
-        ) { this.context?.guiContext?.uiRun(this::pull) }
+        ) { this.context?.guiContext?.uiRun(this::pullGuarded) }
         this.context?.guiContext?.registerGlobalKeyBinding(
             "$ID.push",
             "ctrl shift BACK_SLASH"
-        ) { this.context?.guiContext?.uiRun(this::push) }
+        ) { this.context?.guiContext?.uiRun(this::pushGuarded) }
     }
 
     private fun <R> readRepository(suffix: String, default: R): R? {
@@ -78,7 +86,7 @@ class Plugin(
         }
     }
 
-    private fun readLocalRepository() = readRepository(".local", LocalRepository())
+    private fun readLocalRepository(identifier: String) = readRepository(".$identifier.local", LocalRepository())
     private fun readRemoteRepository() = readRepository("", RemoteRepository())
 
     private fun <R> writeRepository(suffix: String, repository: R): Unit? {
@@ -104,7 +112,9 @@ class Plugin(
         }
     }
 
-    private fun writeLocalRepository(repository: LocalRepository) = writeRepository(".local", repository)
+    private fun writeLocalRepository(identifier: String, repository: LocalRepository) =
+        writeRepository(".$identifier.local", repository)
+
     private fun writeRemoteRepository(repository: RemoteRepository) = writeRepository("", repository)
 
     private fun getProjectRenames(): List<ProjectRename> {
@@ -142,22 +152,26 @@ class Plugin(
             val projectItem = projectItems.getOrNull(projectItemsIndex)
             val oldLocalRepositoryItem = oldLocalRepositoryItems.getOrNull(oldLocalRepositoryItemsIndex)
 
-            // We will need this in all but one case. Not the most efficient (especially with the clone), but this is not going to be the bottleneck.
-            val updatedVersionVector = oldLocalRepositoryItem?.versionVector?.toMutableMap() ?: mutableMapOf()
-            updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
-
             newLocalRepositoryItems.add(
                 when {
                     projectItem == null || (oldLocalRepositoryItem != null && projectItem.identifier > oldLocalRepositoryItem.identifier) -> {
                         // Local repository item not present in project. Must have been deleted.
                         oldLocalRepositoryItemsIndex++
-                        oldLocalRepositoryItem!!.deleted(updatedVersionVector)
+                        if (oldLocalRepositoryItem!!.isDeleted()) {
+                            // Local repository is already marked as deleted (no version vector change).
+                            oldLocalRepositoryItem
+                        } else {
+                            // Local repository is not marked as deleted, do so.
+                            val updatedVersionVector = oldLocalRepositoryItem.versionVector.toMutableMap()
+                            updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
+                            oldLocalRepositoryItem.deleted(updatedVersionVector)
+                        }
                     }
 
                     oldLocalRepositoryItem == null || (projectItem != null && projectItem.identifier < oldLocalRepositoryItem.identifier) -> {
                         // Project item not present in local repository. Add it.
                         projectItemsIndex++
-                        projectItem.repositoryItem(updatedVersionVector)
+                        projectItem.repositoryItem(mutableMapOf(localRepositoryUuid to 1L))
                     }
 
                     else -> {
@@ -169,6 +183,8 @@ class Plugin(
                             oldLocalRepositoryItem
                         } else {
                             // Change. Replace with the project item.
+                            val updatedVersionVector = oldLocalRepositoryItem.versionVector.toMutableMap()
+                            updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
                             projectItem.repositoryItem(updatedVersionVector)
                         }
                     }
@@ -217,76 +233,77 @@ class Plugin(
             val remoteRepositoryItem = remoteRepositoryItems.getOrNull(remoteRepositoryItemsIndex)
             val oldLocalRepositoryItem = oldLocalRepositoryItems.getOrNull(oldLocalRepositoryItemsIndex)
 
-            newLocalRepositoryItems.add(when {
-                remoteRepositoryItem == null || (oldLocalRepositoryItem != null && remoteRepositoryItem.identifier > oldLocalRepositoryItem.identifier) -> {
-                    // Local repository item not present in remote repository. Keep it as is.
-                    oldLocalRepositoryItemsIndex++
-                    assert(oldLocalRepositoryItem!!.versionVector.size == 1) // If an item was deleted on remote, an entry should still be present, but with a null new name.
-                    oldLocalRepositoryItem
-                }
-
-                oldLocalRepositoryItem == null || (remoteRepositoryItem != null && remoteRepositoryItem.identifier < oldLocalRepositoryItem.identifier) -> {
-                    // Remote repository item not present in local repository. Add it (again, deletions would be explicit),
-                    remoteRepositoryItemsIndex++
-                    remoteRepositoryItem
-                }
-
-                else -> {
-                    remoteRepositoryItemsIndex++
-                    oldLocalRepositoryItemsIndex++
-
-                    // Compare version vectors and calculate the new one.
-                    var remoteRepositoryGreater = 0
-                    var oldLocalRepositoryGreater = 0
-                    val updatedVersionVector = mutableMapOf<UUID, Long>()
-                    for (key in remoteRepositoryItem.versionVector.keys.union(oldLocalRepositoryItem.versionVector.keys)) {
-                        val remoteRepositoryValue = remoteRepositoryItem.versionVector.getOrDefault(key, 0L)
-                        val oldLocalRepositoryValue = oldLocalRepositoryItem.versionVector.getOrDefault(key, 0L)
-
-                        if (remoteRepositoryValue > oldLocalRepositoryValue) {
-                            remoteRepositoryGreater++
-                        }
-
-                        if (oldLocalRepositoryValue > remoteRepositoryValue) {
-                            oldLocalRepositoryGreater++
-                        }
-
-                        updatedVersionVector[key] = max(remoteRepositoryValue, oldLocalRepositoryValue)
+            newLocalRepositoryItems.add(
+                when {
+                    remoteRepositoryItem == null || (oldLocalRepositoryItem != null && remoteRepositoryItem.identifier > oldLocalRepositoryItem.identifier) -> {
+                        // Local repository item not present in remote repository. Keep it as is.
+                        oldLocalRepositoryItemsIndex++
+                        check(oldLocalRepositoryItem!!.versionVector.size == 1) { "UNEXPECTED - If an item was deleted on remote, an entry should still be present, but with a null new name." }
+                        oldLocalRepositoryItem
                     }
 
-                    when {
-                        (remoteRepositoryGreater == 0 && oldLocalRepositoryGreater == 0)
-                                || remoteRepositoryItem.matches(oldLocalRepositoryItem) -> {
-                            // Equal in version vector or value. Use remote (including vector) since our version effectively hasn't updated.
-                            assert(remoteRepositoryItem.matches(oldLocalRepositoryItem))
-                            remoteRepositoryItem
+                    oldLocalRepositoryItem == null || (remoteRepositoryItem != null && remoteRepositoryItem.identifier < oldLocalRepositoryItem.identifier) -> {
+                        // Remote repository item not present in local repository. Add it (again, deletions would be explicit),
+                        remoteRepositoryItemsIndex++
+                        remoteRepositoryItem
+                    }
+
+                    else -> {
+                        remoteRepositoryItemsIndex++
+                        oldLocalRepositoryItemsIndex++
+
+                        // Compare version vectors and calculate the new one.
+                        var remoteRepositoryGreater = 0
+                        var oldLocalRepositoryGreater = 0
+                        val updatedVersionVector = mutableMapOf<UUID, Long>()
+                        for (key in remoteRepositoryItem.versionVector.keys.union(oldLocalRepositoryItem.versionVector.keys)) {
+                            val remoteRepositoryValue = remoteRepositoryItem.versionVector.getOrDefault(key, 0L)
+                            val oldLocalRepositoryValue = oldLocalRepositoryItem.versionVector.getOrDefault(key, 0L)
+
+                            if (remoteRepositoryValue > oldLocalRepositoryValue) {
+                                remoteRepositoryGreater++
+                            }
+
+                            if (oldLocalRepositoryValue > remoteRepositoryValue) {
+                                oldLocalRepositoryGreater++
+                            }
+
+                            updatedVersionVector[key] = max(remoteRepositoryValue, oldLocalRepositoryValue)
                         }
 
-                        remoteRepositoryGreater == 0 -> {
-                            // Local supersedes remote. Use local. Local vector equals updated vector.
-                            oldLocalRepositoryItem
-                        }
+                        when {
+                            (remoteRepositoryGreater == 0 && oldLocalRepositoryGreater == 0)
+                                    || remoteRepositoryItem.matches(oldLocalRepositoryItem) -> {
+                                // Equal in version vector or value. Use remote (including vector) since our version effectively hasn't updated.
+                                check(remoteRepositoryItem.matches(oldLocalRepositoryItem)) { "UNEXPECTED - Version vectors match but items don't." }
+                                remoteRepositoryItem
+                            }
 
-                        oldLocalRepositoryGreater == 0 -> {
-                            // Remote supersedes local. Use remote. Remote vector equals updated vector.
-                            remoteRepositoryItem
-                        }
+                            remoteRepositoryGreater == 0 -> {
+                                // Local supersedes remote. Use local. Local vector equals updated vector.
+                                oldLocalRepositoryItem
+                            }
 
-                        else -> {
-                            // Conflict. Try and resolve
-                            conflict = true
-                            when (conflictResolver(context!!, remoteRepositoryItem, oldLocalRepositoryItem)) {
-                                true -> remoteRepositoryItem  // Use remote (including vector) since our version effectively hasn't updated.
-                                false -> oldLocalRepositoryItem.updated(updatedVersionVector)  // Use local with updated vector.
-                                null -> {
-                                    LOG.error { "Conflict resolution failed." }
-                                    return null
+                            oldLocalRepositoryGreater == 0 -> {
+                                // Remote supersedes local. Use remote. Remote vector equals updated vector.
+                                remoteRepositoryItem
+                            }
+
+                            else -> {
+                                // Conflict. Try and resolve
+                                conflict = true
+                                when (conflictResolver(context!!, remoteRepositoryItem, oldLocalRepositoryItem)) {
+                                    true -> remoteRepositoryItem  // Use remote (including vector) since our version effectively hasn't updated.
+                                    false -> oldLocalRepositoryItem.updated(updatedVersionVector)  // Use local with updated vector.
+                                    null -> {
+                                        LOG.error { "Conflict resolution failed." }
+                                        return null
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            })
+                })
         }
 
         return Pair(newLocalRepositoryItems, conflict)
@@ -401,8 +418,14 @@ class Plugin(
 
         val classesToUpdate = mutableListOf<JavaClass>()
         for (clazz in context!!.decompiler.classes) {
-            if (classNamesDelta.any { classNameDelta -> shouldUpdate(clazz.rawName, classNameDelta) } || clazz.dependencies.any { subClass ->
-                    classNamesDelta.any { classNameDelta -> shouldUpdate(subClass.rawName, classNameDelta) } }) {
+            if (classNamesDelta.any { classNameDelta ->
+                    shouldUpdate(
+                        clazz.rawName,
+                        classNameDelta
+                    )
+                } || clazz.dependencies.any { subClass ->
+                    classNamesDelta.any { classNameDelta -> shouldUpdate(subClass.rawName, classNameDelta) }
+                }) {
                 classesToUpdate.add(clazz)
             }
         }
@@ -485,15 +508,20 @@ class Plugin(
         val command = mutableListOf<String>()
 
         if (System.getProperty("os.name").lowercase(Locale.getDefault()).contains("win")) {
-            command.add(0, "powershell.exe")
-            command.add(1, "-File")
+            command.add("powershell.exe")
+            command.add("-ExecutionPolicy")
+            command.add("Bypass")
+            command.add("-File")
         }
 
         command.add(script)
         command.add(options.repository)
 
-        val process = ProcessBuilder(command).start()
-        process.waitFor()
+        val process = ProcessBuilder(command).inheritIO().start()
+        if (!process.waitFor(300, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            return 100
+        }
         return process.exitValue()
     }
 
@@ -514,7 +542,7 @@ class Plugin(
                 }
 
                 else -> {
-                    LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting," }
+                    LOG.error { "Pre-pull script failed permanently with exit code $exitCode on try number $i. Aborting." }
                     return null
                 }
             }
@@ -528,7 +556,9 @@ class Plugin(
         // Pull remote repository into local repository.
         // Update project from local repository.
 
-        val localRepository = readLocalRepository() ?: return
+        val identifier = saver(context!!, LOG) ?: return
+
+        val localRepository = readLocalRepository(identifier) ?: return
 
         projectToLocalRepository(localRepository)
 
@@ -538,18 +568,22 @@ class Plugin(
 
         remoteRepositoryToLocalRepository(remoteRepository, localRepository) ?: return
 
-        writeLocalRepository(localRepository) ?: return
+        writeLocalRepository(identifier, localRepository) ?: return
 
         localRepositoryToProject(localRepository)
+
+        saver(context!!, LOG)
     }
 
     private fun push() {
         // Update local repository with project changes.
         // Pull remote repository into local repository until there is no conflict.
 
+        val identifier = saver(context!!, LOG) ?: return
+
         var localRepository: LocalRepository? = null
         for (i in 1..5) {
-            localRepository = readLocalRepository() ?: return
+            localRepository = readLocalRepository(identifier) ?: return
 
             projectToLocalRepository(localRepository)
 
@@ -579,15 +613,47 @@ class Plugin(
                 }
 
                 else -> {
-                    LOG.error { "Post-push script failed permanently with exit code $exitCode on try number $i. Aborting," }
+                    LOG.error { "Post-push script failed permanently with exit code $exitCode on try number $i. Aborting." }
                     return
                 }
             }
         }
 
         // Think it is a good idea to do this after the script. If something goes wrong, the on-disk local repository should allow us to recover.
-        writeLocalRepository(localRepository!!)
+        writeLocalRepository(identifier, localRepository!!) ?: return
 
         localRepositoryToProject(localRepository)
+
+        saver(context!!, LOG)
+    }
+
+    private fun pullGuarded() {
+        @OptIn(ExperimentalAtomicApi::class)
+        if (running.exchange(true)) {
+            LOG.error { "A pull or push is already running." }
+            return
+        }
+
+        try {
+            pull()
+        } finally {
+            @OptIn(ExperimentalAtomicApi::class)
+            running.store(false)
+        }
+    }
+
+    private fun pushGuarded() {
+        @OptIn(ExperimentalAtomicApi::class)
+        if (running.exchange(true)) {
+            LOG.error { "A pull or push is already running." }
+            return
+        }
+
+        try {
+            push()
+        } finally {
+            @OptIn(ExperimentalAtomicApi::class)
+            running.store(false)
+        }
     }
 }

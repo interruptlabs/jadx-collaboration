@@ -1,8 +1,8 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 plugins {
-	kotlin("jvm") version "1.9.23"
-	kotlin("plugin.noarg") version "1.9.23"
+	kotlin("jvm") version "2.4.0"
+	kotlin("plugin.noarg") version "2.4.0"
 
 	`java-library`
 
@@ -11,6 +11,10 @@ plugins {
 	// auto update dependencies with 'useLatestVersions' task
 	id("se.patrikerdes.use-latest-versions") version "0.2.18"
 	id("com.github.ben-manes.versions") version "0.50.0"
+}
+
+kotlin {
+    jvmToolchain(11)
 }
 
 repositories {
@@ -32,11 +36,6 @@ dependencies {
 
 	testImplementation("org.slf4j:slf4j-simple:2.0.11")
 	testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
-}
-
-java {
-	sourceCompatibility = JavaVersion.VERSION_11
-	targetCompatibility = JavaVersion.VERSION_11
 }
 
 noArg {

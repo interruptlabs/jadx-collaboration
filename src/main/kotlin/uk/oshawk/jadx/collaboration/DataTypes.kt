@@ -128,6 +128,8 @@ interface RepositoryItem {
     fun matches(projectItem: ProjectItem): Boolean
 
     fun matches(repositoryItem: RepositoryItem): Boolean
+
+    fun isDeleted(): Boolean
 }
 
 @NoArgs
@@ -155,6 +157,8 @@ class RepositoryRename(
 
         return repositoryItem.newName == newName
     }
+
+    override fun isDeleted(): Boolean = newName == null
 
     fun convert(): ProjectRename? {
         if (newName == null) {
@@ -194,13 +198,17 @@ class RepositoryComment(
         return repositoryItem.comment == comment && repositoryItem.style == style
     }
 
-    fun convert(): ProjectComment? {
+    override fun isDeleted(): Boolean {
         if (comment == null || style == null) {
-            assert(comment == null && style == null)  // Both or neither should be null.
-            return null
+            check(comment == null && style == null) { "UNEXPECTED - Both or neither of comment and style should be null." }
+            return true
         }
+        return false
+    }
 
-        return ProjectComment(identifier, comment, style)
+    fun convert(): ProjectComment? {
+        if (isDeleted()) return null
+        return ProjectComment(identifier, comment!!, style!!)
     }
 }
 

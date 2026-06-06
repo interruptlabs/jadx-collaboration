@@ -597,7 +597,7 @@ class Plugin(
         }
 
         // Think it is a good idea to do this after the script. If something goes wrong, the on-disk local repository should allow us to recover.
-        writeLocalRepository(localRepository!!)
+        writeLocalRepository(localRepository!!) ?: return
 
         localRepositoryToProject(localRepository)
     }

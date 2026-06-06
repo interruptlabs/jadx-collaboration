@@ -152,22 +152,20 @@ class Plugin(
             val projectItem = projectItems.getOrNull(projectItemsIndex)
             val oldLocalRepositoryItem = oldLocalRepositoryItems.getOrNull(oldLocalRepositoryItemsIndex)
 
-            // We will need this in all but one case. Not the most efficient (especially with the clone), but this is not going to be the bottleneck.
-            val updatedVersionVector = oldLocalRepositoryItem?.versionVector?.toMutableMap() ?: mutableMapOf()
-            updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
-
             newLocalRepositoryItems.add(
                 when {
                     projectItem == null || (oldLocalRepositoryItem != null && projectItem.identifier > oldLocalRepositoryItem.identifier) -> {
                         // Local repository item not present in project. Must have been deleted.
+                        val updatedVersionVector = oldLocalRepositoryItem!!.versionVector.toMutableMap()
+                        updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
                         oldLocalRepositoryItemsIndex++
-                        oldLocalRepositoryItem!!.deleted(updatedVersionVector)
+                        oldLocalRepositoryItem.deleted(updatedVersionVector)
                     }
 
                     oldLocalRepositoryItem == null || (projectItem != null && projectItem.identifier < oldLocalRepositoryItem.identifier) -> {
                         // Project item not present in local repository. Add it.
                         projectItemsIndex++
-                        projectItem.repositoryItem(updatedVersionVector)
+                        projectItem.repositoryItem(mutableMapOf(localRepositoryUuid to 1L))
                     }
 
                     else -> {
@@ -179,6 +177,8 @@ class Plugin(
                             oldLocalRepositoryItem
                         } else {
                             // Change. Replace with the project item.
+                            val updatedVersionVector = oldLocalRepositoryItem.versionVector.toMutableMap()
+                            updatedVersionVector.merge(localRepositoryUuid, 1L, Long::plus)
                             projectItem.repositoryItem(updatedVersionVector)
                         }
                     }

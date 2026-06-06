@@ -419,4 +419,28 @@ class PluginTest {
         mockery.leftPush()
         assertEquals(1, conflicts)
     }
+
+    //
+    // The following tests for regressions to bugs that have been fixed.
+    //
+
+    @Test
+    fun regression0() {
+        // Designed to catch a bug in projectToLocalRepository, where:
+        // - Local repository has a rename B.
+        // - Project has renames A and B.
+        // - Rename A mistakenly inherits B's version vector since they are both at index 0.
+        // - This eventually causes a crash in remoteRepositoryToLocalRepositoryInternal at the check() line.
+
+        val mockery = RepositoryMockery()
+
+        mockery.leftPlugin.renames = listOf(genRename(1))
+        mockery.leftPush()
+
+        mockery.rightPull()
+
+        mockery.rightPlugin.renames += listOf(genRename(0))
+        mockery.rightPush()
+    }
+
 }
